@@ -1,0 +1,10 @@
+{
+  "app_id": "demo_info",
+  "display_name": "Demo Info",
+  "version": "0.1.0",
+  "abi_version": "1",
+  "entry_symbol": "demo_info_main",
+  "description": "Capability inspection app that adapts without board checks.",
+  "required_capabilities": ["display"],
+  "optional_capabilities": ["radio_messaging", "gps_fix", "usb_hostlink"]
+}

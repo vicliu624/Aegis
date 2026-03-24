@@ -1,0 +1,10 @@
+{
+  "app_id": "demo_hello",
+  "display_name": "Demo Hello",
+  "version": "0.1.0",
+  "abi_version": "1",
+  "entry_symbol": "demo_hello_main",
+  "description": "Minimal greeting app for the Aegis stub runtime.",
+  "required_capabilities": ["display"],
+  "optional_capabilities": ["joystick_input", "keyboard_input"]
+}
