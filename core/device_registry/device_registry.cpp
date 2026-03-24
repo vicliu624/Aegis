@@ -2,13 +2,10 @@
 
 #include <stdexcept>
 
-#include "device/packages/mock_device_packages.hpp"
-
 namespace aegis::core {
 
-DeviceRegistry::DeviceRegistry() {
-    register_package(std::make_shared<device::MockDeviceAPackage>());
-    register_package(std::make_shared<device::MockDeviceBPackage>());
+DeviceRegistry::DeviceRegistry(std::vector<device::BoardPackagePtr> packages)
+    : packages_(std::move(packages)) {
 }
 
 void DeviceRegistry::register_package(device::BoardPackagePtr package) {

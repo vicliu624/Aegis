@@ -378,11 +378,13 @@ When an app enters `Running`:
 * it becomes the active foreground owner
 * shell delegates the visible interaction surface
 * app input routing is enabled
+* session-scoped text-input focus may be granted by the runtime
 
 When an app enters `Stopping`:
 
 * foreground ownership is revoked
 * shell becomes the recovery/return authority again
+* session-scoped text-input focus must be revoked before final return
 
 This matters because shell and app must never be confused about who controls the visible world.
 

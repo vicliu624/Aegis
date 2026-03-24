@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  TCA8418 keypad controller used by the Aegis Zephyr board adaptation layer.
+
+compatible: "ti,tca8418-keypad"
+
+include: [base.yaml, i2c-device.yaml]
+
+properties:
+  interrupt-gpios:
+    type: phandle-array
+    required: true
+    description: Interrupt output from the keypad controller.
+
+  keypad-rows:
+    type: int
+    required: true
+    description: Number of matrix rows configured in hardware.
+
+  keypad-columns:
+    type: int
+    required: true
+    description: Number of matrix columns configured in hardware.
+
+  polling-interval-ms:
+    type: int
+    default: 20
+    description: Poll fallback interval used when the IRQ path is unavailable.

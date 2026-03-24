@@ -80,11 +80,12 @@ Its role is to translate **board reality** into **system-understandable structur
 
 ## 4. Core concepts
 
-The device adaptation layer is built around five core concepts:
+The device adaptation layer is built around six core concepts:
 
 * `DeviceProfile`
 * `CapabilitySet`
 * `BoardPackage`
+* `BoardRuntime`
 * `ServiceBinding`
 * `DeviceRegistry`
 
@@ -263,7 +264,55 @@ public:
 
 ---
 
-## 9. DeviceRegistry
+## 9. BoardRuntime
+
+## 9.1 What it is
+
+`BoardRuntime` is the board-local orchestration object that performs the real bring-up discipline for a concrete device.
+
+If `BoardPackage` is the integration boundary, `BoardRuntime` is the object that actually executes:
+
+* power sequencing
+* shared-bus quiescing
+* expander enable paths
+* display transport initialization
+* input controller preparation
+* board-local probe and diagnostics logging
+
+## 9.2 Why it matters
+
+Many MCU devices cannot be adapted correctly by profile data alone.
+
+Real hardware often requires:
+
+* strict initialization ordering
+* bus ownership coordination
+* expander-driven enable lines
+* panel-specific transport details
+* board-specific reset and wake behavior
+
+These concerns are too operational for `DeviceProfile`, but too board-specific for generic runtime, shell, or app-facing services.
+
+So Aegis should model them explicitly rather than hiding them in:
+
+* scattered `#ifdef`
+* ad hoc code in `main()`
+* generic runtime loader logic
+* shell presentation code
+
+## 9.3 Relationship to BoardPackage
+
+The intended layering is:
+
+* `BoardPackage` defines the board integration contract
+* `BoardRuntime` performs the concrete board-local orchestration needed by that package
+* generic Aegis layers consume the resulting `DeviceProfile`, `CapabilitySet`, and bound services
+
+This keeps board-specific sequencing explicit while preserving clean architecture boundaries.
+
+---
+
+## 10. DeviceRegistry
 
 A `DeviceRegistry` is the system’s authority for device identity and available profiles.
 
@@ -278,7 +327,7 @@ This avoids spreading device identity knowledge across unrelated modules.
 
 ---
 
-## 10. Input and display adaptation
+## 11. Input and display adaptation
 
 Two of the most visible areas of hardware divergence are input and display.
 
@@ -316,7 +365,7 @@ Apps should access generic input semantics, not raw board key matrices.
 
 ---
 
-## 11. Power and lifecycle implications
+## 12. Power and lifecycle implications
 
 Some device differences are not merely UI differences.
 
@@ -334,7 +383,7 @@ This is especially important because app runtime policy may depend on device con
 
 ---
 
-## 12. Shell adaptation vs app adaptation
+## 13. Shell adaptation vs app adaptation
 
 Aegis must distinguish carefully between these two:
 
@@ -361,7 +410,7 @@ Apps adapt to **capability**, not to **board identity**.
 
 ---
 
-## 13. Non-negotiable rules
+## 14. Non-negotiable rules
 
 ### Rule 1
 
@@ -387,9 +436,13 @@ Device adaptation is a formal layer, not a collection of `#ifdef`s.
 
 The same Aegis Core should be able to run on multiple `DeviceProfile`s.
 
+### Rule 7
+
+Board-local sequencing must converge inside `BoardRuntime` and/or `BoardPackage`, not inside generic runtime, shell, or app-facing service contracts.
+
 ---
 
-## 14. Minimal implementation target
+## 15. Minimal implementation target
 
 The first useful implementation of the device adaptation layer should prove:
 
@@ -421,7 +474,7 @@ If Aegis Core and the same app runtime can operate on both profiles with only `B
 
 ---
 
-## 15. Summary
+## 16. Summary
 
 The device adaptation layer exists to preserve a fundamental truth:
 

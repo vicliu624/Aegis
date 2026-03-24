@@ -10,7 +10,8 @@ namespace aegis::core {
 
 class DeviceRegistry {
 public:
-    DeviceRegistry();
+    DeviceRegistry() = default;
+    explicit DeviceRegistry(std::vector<device::BoardPackagePtr> packages);
 
     void register_package(device::BoardPackagePtr package);
     [[nodiscard]] std::vector<std::string> known_package_ids() const;

@@ -238,10 +238,12 @@ docs/.doctrees/
 
 # Project specific
 .tmp_lilygolib/
+.tmp/
 
 # build artifacts
 build/
 build.*/
+build-*/
 
 # idf component manager
 managed_components/
@@ -252,3 +254,7 @@ CMakeCache.txt
 
 # sdkconfig local override
 sdkconfig.old
+
+# Keep checked-in placeholder app assets
+!apps/*/icon.bin
+!sdk/templates/**/icon.bin

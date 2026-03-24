@@ -148,6 +148,13 @@ This boundary exists to preserve:
 - service governance
 - hardware authority in the system
 
+The boundary should remain active during runtime, not only at startup.
+
+Examples:
+
+- manifest permission may allow or deny admission
+- Host API may still reject specific service-domain calls such as radio, gps, audio, hostlink, notification posting, or text-input focus control if the current session lacks the declared permission
+
 ---
 
 ## 7. App session model

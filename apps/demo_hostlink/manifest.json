@@ -1,0 +1,28 @@
+{
+  "app_id": "demo_hostlink",
+  "display_name": "Demo Hostlink",
+  "version": "0.1.0",
+  "abi_version": 1,
+  "binary": "app.llext",
+  "entry_symbol": "demo_hostlink_main",
+  "icon": "icon.bin",
+  "description": "Demonstrates runtime-governed hostlink permission admission.",
+  "required_capabilities": [
+    { "id": "display", "min_level": "full" },
+    { "id": "usb_hostlink", "min_level": "degraded" }
+  ],
+  "requested_permissions": [
+    "ui_surface",
+    "notification_post",
+    "hostlink_use"
+  ],
+  "memory_budget": {
+    "heap_bytes": 16384,
+    "ui_bytes": 4096
+  },
+  "singleton": true,
+  "allow_background": false,
+  "category": "examples",
+  "order_hint": 130,
+  "hidden": false
+}

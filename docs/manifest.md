@@ -357,7 +357,21 @@ At minimum, startup admission should check:
 4. binary file exists
 5. entry symbol exists
 6. required capabilities satisfied
-7. memory budget does not violate current device/runtime policy
+7. requested permissions are allowed by current runtime policy
+8. memory budget does not violate current device/runtime policy
+
+Permission requests should remain explicit in manifest data.
+
+Examples:
+
+* an app that wants to post notifications should request `notification_post`
+* an app that wants to claim text-entry focus should request `text_input_focus`
+* an app that wants to access radio, gps, audio, or hostlink service domains should request the matching `radio_use`, `gps_use`, `audio_use`, or `hostlink_use` permission
+
+These permissions should influence both:
+
+* startup admission
+* Host API enforcement while the app session is running
 
 Only after these checks pass may the app move from **Validated** to **Load Requested** / **Loaded**.
 
@@ -376,7 +390,8 @@ Checks:
 * JSON syntax
 * required field presence
 * field type correctness
-* file references exist
+* runtime-critical file references exist
+* presentation resources are recorded as presentation warnings when absent or degraded
 
 ### 11.2 Runtime admission validation
 
@@ -391,6 +406,15 @@ Checks:
 * other runtime policy checks
 
 This separation matters because presence in registry is not the same as runtime admission.
+
+Presentation metadata such as launcher icon assets must remain formal manifest concepts, but they must
+not be confused with runtime-fatal admission requirements.
+
+Examples:
+
+* missing `binary` is a fatal validation error
+* missing `icon` is a presentation warning; the shell should degrade to placeholder art
+* malformed `icon` path should be surfaced to shell/catalog diagnostics without blocking app launch
 
 ---
 

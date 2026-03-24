@@ -3,15 +3,17 @@
 #include <string>
 #include <vector>
 
+#include "shell/settings/settings_entry.hpp"
+
 namespace aegis::shell {
 
 class SettingsModel {
 public:
-    void set_visible_pages(std::vector<std::string> pages);
-    [[nodiscard]] const std::vector<std::string>& visible_pages() const;
+    void set_entries(std::vector<SettingsEntry> entries);
+    [[nodiscard]] const std::vector<SettingsEntry>& entries() const;
 
 private:
-    std::vector<std::string> visible_pages_;
+    std::vector<SettingsEntry> entries_;
 };
 
 }  // namespace aegis::shell

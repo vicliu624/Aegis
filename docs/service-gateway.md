@@ -82,6 +82,7 @@ The Service Gateway is responsible for:
 Apps and runtime components should interact with services such as:
 
 * UI
+* text input
 * storage
 * settings
 * logging
@@ -211,7 +212,30 @@ Non-goal:
 
 ---
 
-## 7.3 Settings Service
+## 7.3 Text Input Service
+
+Purpose:
+
+* expose text-entry state through a stable, device-agnostic contract
+* separate raw keyboard hardware events from interpreted text semantics
+* keep modifier/layer policy under system control
+
+Possible responsibilities:
+
+* report text-entry availability
+* report current modifier/layer state
+* expose latest interpreted text input snapshot
+* expose current text-focus owner and routing state
+* allow runtime-governed focus transfer between shell and the current app session
+
+Non-goal:
+
+* exposing board-specific keypad controller details to apps
+* forcing apps to decode matrix coordinates or driver-private scan codes
+* allowing an app to impersonate another session when claiming focus
+---
+
+## 7.4 Settings Service
 
 Purpose:
 
@@ -232,7 +256,7 @@ Non-goal:
 
 ---
 
-## 7.4 Logging Service
+## 7.5 Logging Service
 
 Purpose:
 
@@ -253,7 +277,7 @@ Non-goal:
 
 ---
 
-## 7.5 Timer Service
+## 7.6 Timer Service
 
 Purpose:
 
@@ -274,7 +298,7 @@ Non-goal:
 
 ---
 
-## 7.6 Radio Service
+## 7.7 Radio Service
 
 Purpose:
 
@@ -294,7 +318,7 @@ Non-goal:
 
 ---
 
-## 7.7 GPS Service
+## 7.8 GPS Service
 
 Purpose:
 
@@ -314,7 +338,7 @@ Non-goal:
 
 ---
 
-## 7.8 Audio Service
+## 7.9 Audio Service
 
 Purpose:
 
@@ -333,7 +357,7 @@ Non-goal:
 
 ---
 
-## 7.9 Notification Service
+## 7.10 Notification Service
 
 Purpose:
 
@@ -352,7 +376,7 @@ Non-goal:
 
 ---
 
-## 7.10 Power Service
+## 7.11 Power Service
 
 Purpose:
 
@@ -371,7 +395,7 @@ Non-goal:
 
 ---
 
-## 7.11 Hostlink / Network / External Connectivity Services
+## 7.12 Hostlink / Network / External Connectivity Services
 
 Purpose:
 
@@ -406,6 +430,13 @@ The service contract should express what the system can do, not how a specific b
 ### 8.3 Ownership clarity
 
 Any object or handle obtained through a service must have clear ownership semantics.
+
+Text-input focus is one example:
+
+* shell-owned focus is system authority
+* app-owned focus is a session-bounded grant
+* teardown must revoke that grant automatically
+* a foreground app should only be able to claim that grant if runtime policy and manifest permission both allow it
 
 ### 8.4 Session awareness
 
@@ -450,6 +481,7 @@ Therefore:
 * service contracts and capability truth must both exist
 * apps and runtime should consult capabilities for admission/adaptation
 * service calls should remain valid and well-defined even when capability is absent or degraded
+* permission-aware service domains should still be enforced at runtime, not only during initial admission
 
 This prevents the API from collapsing into board checks.
 

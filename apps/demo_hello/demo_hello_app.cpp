@@ -1,32 +1,29 @@
 #include "sdk/include/aegis/app_contract.hpp"
 
-#include <sstream>
-
-#include "runtime/host_api/host_api.hpp"
-
-namespace aegis::apps {
-
 namespace {
 
-sdk::AppRunResult run_demo_hello(runtime::HostApi& host) {
-    host.log("demo_hello", "enter demo hello app");
-    host.create_ui_root("demo_hello.root");
-    host.notify("Demo Hello", "Hello from a governed native app");
-
-    std::ostringstream summary;
-    summary << "display=" << host.describe_display() << ", input=" << host.describe_input();
-    host.log("demo_hello", summary.str());
-    host.log("demo_hello", "returning control to shell");
-    return sdk::AppRunResult::Completed;
-}
+constexpr const char* kTag = "demo_hello";
+constexpr const char* kRootName = "demo_hello.root";
 
 }  // namespace
 
-sdk::AppRuntimeContract demo_hello_contract() {
-    return sdk::AppRuntimeContract {
-        .entry_symbol = "demo_hello_main",
-        .entrypoint = run_demo_hello,
-    };
-}
+extern "C" aegis_app_run_result_v1_t demo_hello_main(const aegis_host_api_v1_t* host_api) {
+    if (host_api == nullptr || host_api->abi_version != AEGIS_HOST_API_ABI_V1) {
+        return AEGIS_APP_RUN_RESULT_FAILED;
+    }
 
-}  // namespace aegis::apps
+    if (host_api->log_write != nullptr) {
+        host_api->log_write(host_api->user_data, kTag, "enter demo hello app");
+    }
+    if (host_api->ui_create_root != nullptr) {
+        host_api->ui_create_root(host_api->user_data, kRootName);
+    }
+    if (host_api->log_write != nullptr) {
+        host_api->log_write(host_api->user_data, kTag, "returning control to shell");
+    }
+    if (host_api->ui_destroy_root != nullptr) {
+        host_api->ui_destroy_root(host_api->user_data, kRootName);
+    }
+
+    return AEGIS_APP_RUN_RESULT_COMPLETED;
+}

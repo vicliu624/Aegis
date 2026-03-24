@@ -1,0 +1,25 @@
+{
+  "app_id": "demo_background",
+  "display_name": "Demo Background",
+  "version": "0.1.0",
+  "abi_version": 1,
+  "binary": "app.llext",
+  "entry_symbol": "demo_background_main",
+  "icon": "icon.bin",
+  "description": "Demonstrates runtime-governed background execution policy.",
+  "required_capabilities": [
+    { "id": "display", "min_level": "full" }
+  ],
+  "requested_permissions": [
+    "ui_surface"
+  ],
+  "memory_budget": {
+    "heap_bytes": 8192,
+    "ui_bytes": 2048
+  },
+  "singleton": true,
+  "allow_background": true,
+  "category": "examples",
+  "order_hint": 140,
+  "hidden": false
+}

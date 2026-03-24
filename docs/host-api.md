@@ -259,6 +259,7 @@ Rules:
 
 * app-facing contracts stay generic
 * board-specific service types must not appear here
+* runtime permission policy may still deny individual service domains even after an app was admitted
 
 ---
 
@@ -316,6 +317,7 @@ Examples:
 * subscriptions
 * service handles
 * notifications
+* text-input focus grants
 * future async work handles
 
 This is essential for clean exit and unload.
@@ -346,6 +348,15 @@ For example:
 * app decides whether degraded support is sufficient
 
 This keeps runtime truth and service access aligned.
+
+The Host API must also remain subordinate to runtime permission policy.
+
+Examples:
+
+* an app may be able to inspect text-input state as a generic service query
+* but claiming session text-input focus should require an explicit manifest permission such as `text_input_focus`
+* an app may be statically compatible with a device that has radio or gps hardware
+* but access to `radio`, `gps`, `audio`, or `hostlink` service domains should still be checked at the Host API boundary against manifest-requested permissions
 
 ---
 
@@ -458,6 +469,12 @@ The first useful Host API in Aegis should include only a small set:
 * settings get/set
 * capability query
 * one generic service call path
+
+As typed service domains mature, the service call path may additionally expose focused contracts such as:
+
+* text-input state
+* text-input focus state
+* session-scoped focus request/release
 
 That is enough to prove:
 

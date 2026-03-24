@@ -1,11 +1,11 @@
 #include "services/notification/console_notification_service.hpp"
 
-#include <iostream>
-
 namespace aegis::services {
 
+ConsoleNotificationService::ConsoleNotificationService(platform::Logger& logger) : logger_(logger) {}
+
 void ConsoleNotificationService::notify(std::string title, std::string body) {
-    std::cout << "[notify][" << title << "] " << body << '\n';
+    logger_.info("notify", "[" + title + "] " + body);
 }
 
 }  // namespace aegis::services

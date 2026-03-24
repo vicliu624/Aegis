@@ -300,6 +300,12 @@ Examples:
 - open settings
 - page navigation
 
+When text entry is available, the shell should also be treated as an explicit focus owner:
+
+- while shell owns foreground, shell owns text-input focus
+- when a foreground app session is admitted, text-input focus may be granted to that session
+- when the app stops or fails, focus must return to shell
+
 This abstraction allows shell behavior to remain coherent across device classes.
 
 ---

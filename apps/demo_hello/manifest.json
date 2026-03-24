@@ -2,9 +2,32 @@
   "app_id": "demo_hello",
   "display_name": "Demo Hello",
   "version": "0.1.0",
-  "abi_version": "1",
+  "abi_version": 1,
+  "binary": "app.llext",
   "entry_symbol": "demo_hello_main",
+  "icon": "icon.bin",
   "description": "Minimal greeting app for the Aegis stub runtime.",
-  "required_capabilities": ["display"],
-  "optional_capabilities": ["joystick_input", "keyboard_input"]
+  "required_capabilities": [
+    { "id": "display", "min_level": "full" }
+  ],
+  "optional_capabilities": [
+    { "id": "joystick_input", "min_level": "degraded" },
+    { "id": "keyboard_input", "min_level": "degraded" }
+  ],
+  "preferred_capabilities": [
+    { "id": "keyboard_input", "min_level": "full" }
+  ],
+  "requested_permissions": [
+    "ui_surface",
+    "notification_post"
+  ],
+  "memory_budget": {
+    "heap_bytes": 16384,
+    "ui_bytes": 8192
+  },
+  "singleton": true,
+  "allow_background": false,
+  "category": "examples",
+  "order_hint": 100,
+  "hidden": false
 }

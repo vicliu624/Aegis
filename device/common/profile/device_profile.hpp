@@ -43,6 +43,7 @@ struct ShellHints {
 
 struct RuntimeLimits {
     std::size_t max_app_memory_bytes {0};
+    std::size_t max_ui_memory_bytes {0};
     int max_foreground_apps {1};
 };
 

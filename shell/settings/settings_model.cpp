@@ -2,12 +2,12 @@
 
 namespace aegis::shell {
 
-void SettingsModel::set_visible_pages(std::vector<std::string> pages) {
-    visible_pages_ = std::move(pages);
+void SettingsModel::set_entries(std::vector<SettingsEntry> entries) {
+    entries_ = std::move(entries);
 }
 
-const std::vector<std::string>& SettingsModel::visible_pages() const {
-    return visible_pages_;
+const std::vector<SettingsEntry>& SettingsModel::entries() const {
+    return entries_;
 }
 
 }  // namespace aegis::shell

@@ -2,9 +2,40 @@
   "app_id": "demo_info",
   "display_name": "Demo Info",
   "version": "0.1.0",
-  "abi_version": "1",
+  "abi_version": 1,
+  "binary": "app.llext",
   "entry_symbol": "demo_info_main",
+  "icon": "icon.bin",
   "description": "Capability inspection app that adapts without board checks.",
-  "required_capabilities": ["display"],
-  "optional_capabilities": ["radio_messaging", "gps_fix", "usb_hostlink"]
+  "required_capabilities": [
+    { "id": "display", "min_level": "full" }
+  ],
+  "optional_capabilities": [
+    { "id": "radio_messaging", "min_level": "degraded" },
+    { "id": "gps_fix", "min_level": "degraded" },
+    { "id": "usb_hostlink", "min_level": "degraded" }
+  ],
+  "preferred_capabilities": [
+    { "id": "keyboard_input", "min_level": "full" }
+  ],
+  "requested_permissions": [
+    "ui_surface",
+    "timer_control",
+    "settings_write",
+    "notification_post",
+    "storage_access",
+    "text_input_focus",
+    "radio_use",
+    "gps_use",
+    "audio_use"
+  ],
+  "memory_budget": {
+    "heap_bytes": 32768,
+    "ui_bytes": 12288
+  },
+  "singleton": true,
+  "allow_background": false,
+  "category": "examples",
+  "order_hint": 110,
+  "hidden": false
 }
