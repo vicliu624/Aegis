@@ -97,6 +97,11 @@ Used for ESP flashing, especially appfs flashing through the repository helper p
 Used to build `appfs.bin` when the packaging flow relies on the LittleFS image tool rather than the
 Python fallback path.
 
+### 3.8 littlefs-python
+
+Used as the cross-platform fallback backend for appfs image generation when `mklittlefs` is not
+available.
+
 ---
 
 ## 4. Cross-platform notes
@@ -294,12 +299,23 @@ the repository appfs flash path currently relies on the ESP flashing toolchain m
 
 ### Windows
 
-The current repository appfs helper can auto-fetch some tooling on Windows when needed, so the path is
-a little more forgiving.
+The current repository appfs helper can use either:
+
+- `mklittlefs`
+- or the Python `littlefs-python` backend
+
+With auto-fetch enabled, the Python backend can be installed into the tool cache automatically.
 
 ### Linux and macOS
 
-You should assume you need to provide `mklittlefs` yourself unless your environment already has it.
+Linux and macOS now follow the same general pattern:
+
+- if `mklittlefs` is already installed, the helper can use it
+- otherwise it can fall back to `littlefs-python`
+- with auto-fetch enabled, that Python backend can be installed into the tool cache automatically
+
+That means Linux/macOS are no longer forced onto a separate “must already have `mklittlefs`”
+experience just to package appfs.
 
 Verify:
 
@@ -310,6 +326,13 @@ mklittlefs --help
 If `mklittlefs` is not globally installed, you can still point the repository packaging flow at an
 explicit tool path through the lower-level helper configuration path documented in
 [building-zephyr.md](./building-zephyr.md).
+
+If you prefer to verify the Python fallback path directly, you can also confirm that `littlefs-python`
+is importable:
+
+```bash
+python -c "import littlefs"
+```
 
 ---
 
@@ -419,7 +442,7 @@ python -m pip install esptool
 
 ### `mklittlefs` is missing during appfs packaging
 
-Install it on the host or provide the tool through the appfs helper path described in
+Install it on the host, let the helper fall back to `littlefs-python`, or provide the tool through the appfs helper path described in
 [building-zephyr.md](./building-zephyr.md).
 
 ---

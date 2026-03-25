@@ -23,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--deploy-root", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--layout-json", required=True)
+    parser.add_argument("--backend", choices=("auto", "mklittlefs", "python"), default="auto")
     parser.add_argument("--mklittlefs", default="")
     parser.add_argument("--tool-cache-dir", default="")
     parser.add_argument("--allow-auto-fetch", action="store_true")
@@ -166,6 +167,13 @@ def resolve_mklittlefs(args: argparse.Namespace) -> str:
     )
 
 
+def try_resolve_mklittlefs(args: argparse.Namespace) -> str | None:
+    try:
+        return resolve_mklittlefs(args)
+    except RuntimeError:
+        return None
+
+
 def install_littlefs_python(cache_dir: pathlib.Path) -> pathlib.Path:
     target_dir = cache_dir / "littlefs_python"
     module_dir = target_dir / "littlefs"
@@ -207,6 +215,13 @@ def resolve_littlefs_python(args: argparse.Namespace):
     return importlib.import_module("littlefs")
 
 
+def try_resolve_littlefs_python(args: argparse.Namespace):
+    try:
+        return resolve_littlefs_python(args)
+    except RuntimeError:
+        return None
+
+
 def iter_fs_entries(fs_root: pathlib.Path):
     if not fs_root.exists():
         return
@@ -224,11 +239,14 @@ def iter_fs_entries(fs_root: pathlib.Path):
             yield rel_path.as_posix(), False, file_path
 
 
-def build_image_with_littlefs_python(args: argparse.Namespace, image_size: int) -> str:
+def build_image_with_littlefs_python(args: argparse.Namespace,
+                                     image_size: int,
+                                     littlefs=None) -> str:
     if image_size % args.block_size != 0:
         raise RuntimeError("appfs image size must be a multiple of the LittleFS block size")
 
-    littlefs = resolve_littlefs_python(args)
+    if littlefs is None:
+        littlefs = resolve_littlefs_python(args)
     deploy_root = pathlib.Path(args.deploy_root)
     fs_root = deploy_root.parent if deploy_root.name == "apps" else deploy_root
     output = pathlib.Path(args.output)
@@ -258,19 +276,16 @@ def build_image_with_littlefs_python(args: argparse.Namespace, image_size: int) 
     return "littlefs-python"
 
 
-def build_image(args: argparse.Namespace, image_size: int) -> None:
+def build_image_with_mklittlefs(args: argparse.Namespace,
+                                image_size: int,
+                                tool: str | None = None) -> str:
     deploy_root = pathlib.Path(args.deploy_root)
     fs_root = deploy_root.parent if deploy_root.name == "apps" else deploy_root
     if not fs_root.exists():
         raise RuntimeError(f"deploy root does not exist: {fs_root}")
 
-    prefer_python_backend = platform.system().lower() == "windows" and not args.mklittlefs.strip()
-    if prefer_python_backend:
-        backend = build_image_with_littlefs_python(args, image_size)
-        print(f"[aegis-appfs] image backend={backend}")
-        return
-
-    tool = resolve_mklittlefs(args)
+    if tool is None:
+        tool = resolve_mklittlefs(args)
     output = pathlib.Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -291,7 +306,46 @@ def build_image(args: argparse.Namespace, image_size: int) -> None:
     lowered = tool_output.lower()
     if "error" in lowered or "no more free space" in lowered:
         raise RuntimeError(f"mklittlefs reported a packaging failure:\n{tool_output.strip()}")
-    print("[aegis-appfs] image backend=mklittlefs")
+    return "mklittlefs"
+
+
+def choose_backend(args: argparse.Namespace) -> tuple[str, object | None]:
+    if args.backend == "python":
+        littlefs = resolve_littlefs_python(args)
+        return "python", littlefs
+
+    if args.backend == "mklittlefs":
+        tool = resolve_mklittlefs(args)
+        return "mklittlefs", tool
+
+    tool = try_resolve_mklittlefs(args)
+    if tool:
+        return "mklittlefs", tool
+
+    littlefs = try_resolve_littlefs_python(args)
+    if littlefs is not None:
+        return "python", littlefs
+
+    raise RuntimeError(
+        "no appfs backend is available. Install or provide mklittlefs, install littlefs-python, "
+        "or enable auto-fetch with a writable tool cache directory."
+    )
+
+
+def build_image(args: argparse.Namespace, image_size: int) -> None:
+    deploy_root = pathlib.Path(args.deploy_root)
+    fs_root = deploy_root.parent if deploy_root.name == "apps" else deploy_root
+    if not fs_root.exists():
+        raise RuntimeError(f"deploy root does not exist: {fs_root}")
+
+    backend, backend_handle = choose_backend(args)
+    if backend == "python":
+        used_backend = build_image_with_littlefs_python(args, image_size, backend_handle)
+        print(f"[aegis-appfs] image backend={used_backend}")
+        return
+
+    used_backend = build_image_with_mklittlefs(args, image_size, backend_handle)
+    print(f"[aegis-appfs] image backend={used_backend}")
 
 
 def main() -> int:

@@ -159,8 +159,9 @@ For ESP flashing you also need:
 
 For appfs packaging:
 
-- on Windows, the current helper can auto-fetch tooling when needed
-- on Linux and macOS, install `mklittlefs` yourself or provide it explicitly if your environment does not already have it
+- the helper prefers `mklittlefs` when it is available
+- if `mklittlefs` is not available, the helper can fall back to `littlefs-python`
+- with auto-fetch enabled, that Python fallback can be installed into the tool cache on all supported host platforms
 
 The script does not hide these dependencies. It makes the repository workflow repeatable once the
 environment exists.
@@ -435,6 +436,14 @@ Their roles are:
 The top-level build driver does not replace them. It orchestrates the CMake targets that already use
 them.
 
+For appfs packaging specifically, `build_appfs_image.py` now supports three backend modes:
+
+- `auto`: prefer `mklittlefs`, otherwise fall back to `littlefs-python`
+- `mklittlefs`: require the native tool path
+- `python`: require the Python LittleFS backend
+
+The repository CMake path currently uses the helper's default `auto` mode.
+
 ---
 
 ## 11. Typical bring-up sequence
@@ -489,7 +498,7 @@ Start with:
 Check:
 
 - staged app packages exist under `<build-dir>/deploy/lfs/apps`
-- LittleFS packaging tooling is available for your host
+- either `mklittlefs` or `littlefs-python` is available for your host
 - the generated deploy tree fits inside `storage_partition`
 
 ### Flashing appfs fails
