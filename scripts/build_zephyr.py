@@ -24,6 +24,7 @@ DEFAULT_FLASH_CHIP = "esp32s3"
 class Paths:
     repo_root: pathlib.Path
     zephyr_source: pathlib.Path
+    host_check_script: pathlib.Path
     linux_check_script: pathlib.Path
 
 
@@ -51,6 +52,7 @@ def resolve_paths() -> Paths:
     return Paths(
         repo_root=repo_root,
         zephyr_source=repo_root / "ports" / "zephyr",
+        host_check_script=repo_root / "scripts" / "check_host_env.py",
         linux_check_script=repo_root / "scripts" / "check_linux_env.py",
     )
 
@@ -260,6 +262,13 @@ def command_check_linux_env(args: argparse.Namespace, paths: Paths) -> None:
         raise SystemExit(exit_code)
 
 
+def command_check_host_env(args: argparse.Namespace, paths: Paths) -> None:
+    del args
+    exit_code = run_passthrough([sys.executable, str(paths.host_check_script)], paths.repo_root)
+    if exit_code != 0:
+        raise SystemExit(exit_code)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Cross-platform build and flash driver for the Aegis Zephyr target."
@@ -267,6 +276,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     commands = {
+        "check-host-env": command_check_host_env,
         "check-linux-env": command_check_linux_env,
         "configure": command_configure,
         "build-firmware": command_build_firmware,
@@ -280,7 +290,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     for name in commands:
         subparser = subparsers.add_parser(name)
-        if name != "check-linux-env":
+        if name not in {"check-host-env", "check-linux-env"}:
             add_common_arguments(subparser)
         subparser.set_defaults(handler=commands[name])
 

@@ -77,7 +77,7 @@ Use this rule:
 - Windows host: start at [Windows Quick Start](#5-windows-quick-start)
 - Linux host: start at [Linux Quick Start](#6-linux-quick-start)
 - WSL host: start at [WSL Quick Start](#7-wsl-quick-start)
-- macOS host: start at [macos-quick-start](#8-macos-quick-start)
+- macOS host: start at [macOS Quick Start](#8-macos-quick-start)
 
 If you are unsure whether the machine is fully onboarded, do not start with `flash-all`.
 Start with the first check for your platform.
@@ -91,14 +91,27 @@ Start with the first check for your platform.
 From the repository root:
 
 ```powershell
+python scripts/build_zephyr.py check-host-env
+```
+
+This is the safest first step because it does not build anything. It verifies the host environment
+that the repository depends on.
+
+If that passes, you can optionally inspect the resolved build commands:
+
+```powershell
 python scripts/build_zephyr.py print-plan
 ```
 
-This is a safe first step because it does not build anything. It only verifies that:
+The host check verifies the items most likely to break a first Windows bring-up:
 
 - Python can run
-- the top-level build driver can run
-- the script can resolve the default command plan
+- `pip` can run in the active Python environment
+- CMake is callable
+- Ninja is callable
+- `west` is callable
+- `esptool` is callable
+- `ZEPHYR_BASE` is set
 
 ### 5.2 First real check
 
@@ -147,11 +160,17 @@ the wrong generator choice.
 From the repository root:
 
 ```bash
-python3 scripts/build_zephyr.py check-linux-env
+python3 scripts/build_zephyr.py check-host-env
 ```
 
 This is the fastest way to catch the most common Linux onboarding misses before a full Zephyr
 configure.
+
+If you want the older Linux-specific compatibility path, this still exists:
+
+```bash
+python3 scripts/build_zephyr.py check-host-env
+```
 
 ### 6.2 If the check reports missing tools
 
@@ -283,11 +302,10 @@ macOS uses the same repository entrypoint as Linux.
 ### 8.1 First check
 
 ```bash
-python3 scripts/build_zephyr.py check-linux-env
+python3 scripts/build_zephyr.py check-host-env
 ```
 
-The helper is Linux-oriented, so on macOS treat it as a quick prerequisite sanity check rather than a
-perfect platform-specific doctor.
+This gives macOS the same top-level self-check entrypoint as Windows and Linux.
 
 ### 8.2 Configure and build
 
@@ -314,6 +332,7 @@ If your macOS Python environment does not expose `pip`, `west`, or `esptool`, go
 ### Windows
 
 ```powershell
+python scripts/build_zephyr.py check-host-env
 python scripts/build_zephyr.py configure
 python scripts/build_zephyr.py build-all --parallel 8
 python scripts/build_zephyr.py flash-all --port COM7 --parallel 8
@@ -322,7 +341,7 @@ python scripts/build_zephyr.py flash-all --port COM7 --parallel 8
 ### Linux
 
 ```bash
-python3 scripts/build_zephyr.py check-linux-env
+python3 scripts/build_zephyr.py check-host-env
 python3 scripts/build_zephyr.py configure
 python3 scripts/build_zephyr.py build-all --parallel 8
 python3 scripts/build_zephyr.py flash-all --port /dev/ttyACM0 --parallel 8
@@ -331,7 +350,7 @@ python3 scripts/build_zephyr.py flash-all --port /dev/ttyACM0 --parallel 8
 ### WSL
 
 ```bash
-python3 scripts/build_zephyr.py check-linux-env
+python3 scripts/build_zephyr.py check-host-env
 python3 scripts/build_zephyr.py configure
 python3 scripts/build_zephyr.py build-all --parallel 8
 python3 scripts/build_zephyr.py flash-all --port /dev/ttyACM0 --parallel 8
@@ -340,7 +359,7 @@ python3 scripts/build_zephyr.py flash-all --port /dev/ttyACM0 --parallel 8
 ### macOS
 
 ```bash
-python3 scripts/build_zephyr.py check-linux-env
+python3 scripts/build_zephyr.py check-host-env
 python3 scripts/build_zephyr.py configure
 python3 scripts/build_zephyr.py build-all --parallel 8
 python3 scripts/build_zephyr.py flash-all --port /dev/cu.usbmodem101 --parallel 8

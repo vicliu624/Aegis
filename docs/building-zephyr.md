@@ -121,6 +121,14 @@ The repository now includes a cross-platform Python build driver:
 
 - [build_zephyr.py](../scripts/build_zephyr.py)
 
+Before the first real configure on a new machine, the recommended host sanity check is:
+
+```bash
+python scripts/build_zephyr.py check-host-env
+```
+
+On Linux, WSL, or macOS, use `python3` instead if that is the interpreter name in your shell.
+
 It runs on Windows, Linux, and macOS because it only orchestrates:
 
 - `cmake -S ... -B ...`

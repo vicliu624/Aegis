@@ -362,27 +362,42 @@ If that import is missing and your Linux/WSL Python also lacks `pip`, install `p
 
 Once the host tools are installed, verify from the repository root.
 
-### 11.1 Minimal Linux or WSL self-check
+### 11.1 Cross-platform host self-check
 
-On Linux or WSL, start with:
+On any host, start with:
+
+```bash
+python scripts/build_zephyr.py check-host-env
+```
+
+On Linux, WSL, or macOS, use `python3` instead if that is how the active interpreter is exposed in
+your shell.
+
+This performs a fast scan for the most common missing prerequisites:
+
+- Python
+- `python -m pip`
+- `cmake`
+- `ninja`
+- `west`
+- `python -m esptool`
+- `ZEPHYR_BASE`
+
+On Linux or WSL, the same top-level command will still report the Linux-style issues we care about
+most, including missing `python3-pip`-equivalent support in the active Python environment.
+
+It is meant to catch the most common onboarding misses before you run the full Zephyr configure step.
+When it finds a missing prerequisite, it also prints suggested repair actions, including common
+Ubuntu/WSL installation examples for items such as `python3-pip`, `cmake`, and `ninja-build`, plus
+Windows or macOS suggestions on those hosts.
+
+### 11.2 Linux or WSL compatibility self-check
+
+If you want the older Linux-specific compatibility path, it still exists:
 
 ```bash
 python scripts/build_zephyr.py check-linux-env
 ```
-
-This performs a fast scan for the most common missing prerequisites:
-
-- `python3`
-- `python3 -m pip`
-- `cmake`
-- `ninja`
-- `west`
-- `python3 -m esptool`
-- `ZEPHYR_BASE`
-
-It is meant to catch the most common onboarding misses before you run the full Zephyr configure step.
-When it finds a missing prerequisite, it also prints suggested repair actions, including common
-Ubuntu/WSL installation examples for items such as `python3-pip`, `cmake`, and `ninja-build`.
 
 If you want to invoke the lower-level helper directly, it still exists at:
 
@@ -390,7 +405,7 @@ If you want to invoke the lower-level helper directly, it still exists at:
 python3 scripts/check_linux_env.py
 ```
 
-### 11.2 Inspect the planned build commands
+### 11.3 Inspect the planned build commands
 
 ```bash
 python scripts/build_zephyr.py print-plan
@@ -398,7 +413,7 @@ python scripts/build_zephyr.py print-plan
 
 This should print the configured `cmake` and `cmake --build` commands without executing them.
 
-### 11.3 Run a real configure
+### 11.4 Run a real configure
 
 ```bash
 python scripts/build_zephyr.py configure
@@ -415,7 +430,7 @@ If it succeeds, your machine has at least:
 - toolchain discovery working
 - repository-specific Zephyr patch checks working
 
-### 11.4 Optional full build verification
+### 11.5 Optional full build verification
 
 ```bash
 python scripts/build_zephyr.py build-all --parallel 8
@@ -511,6 +526,7 @@ On minimal Linux or WSL environments, the missing piece is often simply `python3
 
 If you are preparing a new machine for someone else, hand off only after all of these pass:
 
+- `python scripts/build_zephyr.py check-host-env`
 - `python3 scripts/check_linux_env.py` on Linux/WSL hosts
 - `python scripts/build_zephyr.py check-linux-env` on Linux/WSL hosts
 - `python --version`
