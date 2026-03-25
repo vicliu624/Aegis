@@ -145,9 +145,9 @@ int ServiceGatewayDispatch::call(uint32_t domain,
                 }
                 const auto* request = static_cast<const aegis_settings_get_request_v1_t*>(input);
                 aegis_settings_get_response_v1_t response {};
-                const auto value = services_.settings()->get(request->key);
-                response.found = value.empty() ? 0u : 1u;
-                copy_text(response.value, sizeof(response.value), value);
+                const auto value = services_.settings()->find(request->key);
+                response.found = value.has_value() ? 1u : 0u;
+                copy_text(response.value, sizeof(response.value), value.value_or(""));
                 return copy_struct_result(response, output, output_size);
             }
             return AEGIS_HOST_STATUS_UNSUPPORTED;

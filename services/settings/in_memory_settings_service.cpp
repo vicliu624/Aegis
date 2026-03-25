@@ -6,9 +6,12 @@ void InMemorySettingsService::set(std::string key, std::string value) {
     values_[std::move(key)] = std::move(value);
 }
 
-std::string InMemorySettingsService::get(const std::string& key) const {
+std::optional<std::string> InMemorySettingsService::find(const std::string& key) const {
     const auto it = values_.find(key);
-    return it == values_.end() ? std::string {} : it->second;
+    if (it == values_.end()) {
+        return std::nullopt;
+    }
+    return it->second;
 }
 
 }  // namespace aegis::services

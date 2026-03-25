@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -103,7 +104,11 @@ class ISettingsService {
 public:
     virtual ~ISettingsService() = default;
     virtual void set(std::string key, std::string value) = 0;
-    [[nodiscard]] virtual std::string get(const std::string& key) const = 0;
+    [[nodiscard]] virtual std::optional<std::string> find(const std::string& key) const = 0;
+
+    [[nodiscard]] std::string get(const std::string& key) const {
+        return find(key).value_or("");
+    }
 };
 
 class ITimerService {

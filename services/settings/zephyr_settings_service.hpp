@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <unordered_map>
 #include <string>
 
@@ -12,7 +13,7 @@ public:
     explicit ZephyrSettingsService(std::string namespace_root = "aegis");
 
     void set(std::string key, std::string value) override;
-    [[nodiscard]] std::string get(const std::string& key) const override;
+    [[nodiscard]] std::optional<std::string> find(const std::string& key) const override;
 
 private:
     [[nodiscard]] std::string full_key(const std::string& key) const;
