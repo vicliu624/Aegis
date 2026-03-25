@@ -20,6 +20,7 @@ Current status:
 - A formal `aegis_zephyr_appfs_image` target now exists. It derives the `storage_partition` size and offset from `zephyr.dts`, writes an `appfs-layout.json`, and now auto-fetches a Windows `mklittlefs` binary into the build cache when no explicit tool path is configured.
 - The T-LoRa-Pager overlay now reclaims the real 8MB flash space instead of stopping at the inherited 4MB partition profile, so `storage_partition` can hold a real multi-app `appfs.bin`.
 - A formal `aegis_zephyr_flash_appfs` target now exists. It writes the generated `appfs.bin` directly to the resolved `storage_partition` offset through `esptool`, with the serial port supplied through `AEGIS_ZEPHYR_FLASH_PORT`.
+- The Zephyr entrypoint now verifies the local Xtensa `R_XTENSA_RTLD` LLEXT no-op patch against the active `ZEPHYR_BASE` during configure, and by default auto-applies it so Pager bring-up does not silently depend on an untracked manual edit under `C:\\ProgramData\\zephyrproject\\zephyr`.
 
 Expected next steps:
 
@@ -38,6 +39,13 @@ west build -b esp32s3_devkitc/esp32s3/procpu ports/zephyr ^
 ```
 
 This uses the ESP32-S3 devkit SoC target as the Zephyr base while binding Aegis device adaptation to the concrete T-LoRa-Pager wiring described in the overlay and `zephyr_tlora_pager_sx1262` board package.
+
+Local Zephyr patch behavior:
+
+- configure will verify the required Xtensa loader patch inside the active `ZEPHYR_BASE`
+- by default Aegis auto-applies the patch if it is missing
+- set `-DAEGIS_ZEPHYR_AUTO_APPLY_LOCAL_PATCHES=OFF` if you want configure to fail instead of mutating the local Zephyr tree
+- the helper logic lives in [ensure_xtensa_rtld_patch.py](C:/Users/VicLi/Documents/Projects/aegis/ports/zephyr/scripts/ensure_xtensa_rtld_patch.py) and the tracked rationale lives in [README.md](C:/Users/VicLi/Documents/Projects/aegis/ports/zephyr/patches/README.md)
 
 Current appfs workflow:
 

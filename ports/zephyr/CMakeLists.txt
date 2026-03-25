@@ -1,5 +1,46 @@
 cmake_minimum_required(VERSION 3.20)
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+option(AEGIS_ZEPHYR_AUTO_APPLY_LOCAL_PATCHES
+    "Automatically apply required local source patches to the active Zephyr tree during configure." ON)
+
+if(NOT DEFINED ENV{ZEPHYR_BASE} OR "$ENV{ZEPHYR_BASE}" STREQUAL "")
+    message(FATAL_ERROR "ZEPHYR_BASE must be set before configuring the Zephyr target")
+endif()
+
+set(AEGIS_ZEPHYR_LOCAL_PATCH_HELPER
+    "${CMAKE_CURRENT_LIST_DIR}/scripts/ensure_xtensa_rtld_patch.py")
+set(AEGIS_ZEPHYR_LOCAL_PATCH_MODE "check")
+if(AEGIS_ZEPHYR_AUTO_APPLY_LOCAL_PATCHES)
+    set(AEGIS_ZEPHYR_LOCAL_PATCH_MODE "apply")
+endif()
+
+execute_process(
+    COMMAND ${Python3_EXECUTABLE}
+        "${AEGIS_ZEPHYR_LOCAL_PATCH_HELPER}"
+        --zephyr-base "$ENV{ZEPHYR_BASE}"
+        --mode "${AEGIS_ZEPHYR_LOCAL_PATCH_MODE}"
+    RESULT_VARIABLE AEGIS_ZEPHYR_LOCAL_PATCH_RC
+    OUTPUT_VARIABLE AEGIS_ZEPHYR_LOCAL_PATCH_STDOUT
+    ERROR_VARIABLE AEGIS_ZEPHYR_LOCAL_PATCH_STDERR
+    COMMAND_ECHO STDOUT)
+
+if(NOT AEGIS_ZEPHYR_LOCAL_PATCH_RC EQUAL 0)
+    message(FATAL_ERROR
+        "Failed to verify/apply required local Zephyr patches.\n"
+        "stdout:\n${AEGIS_ZEPHYR_LOCAL_PATCH_STDOUT}\n"
+        "stderr:\n${AEGIS_ZEPHYR_LOCAL_PATCH_STDERR}\n"
+        "See ports/zephyr/patches/README.md for context.")
+endif()
+
+if(NOT "${AEGIS_ZEPHYR_LOCAL_PATCH_STDOUT}" STREQUAL "")
+    message(STATUS "${AEGIS_ZEPHYR_LOCAL_PATCH_STDOUT}")
+endif()
+if(NOT "${AEGIS_ZEPHYR_LOCAL_PATCH_STDERR}" STREQUAL "")
+    message(STATUS "${AEGIS_ZEPHYR_LOCAL_PATCH_STDERR}")
+endif()
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(aegis_zephyr_target)
 
