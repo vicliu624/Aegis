@@ -26,6 +26,7 @@ class Paths:
     zephyr_source: pathlib.Path
     host_check_script: pathlib.Path
     linux_check_script: pathlib.Path
+    pager_verify_script: pathlib.Path
 
 
 def shell_join(command: Sequence[str]) -> str:
@@ -67,6 +68,7 @@ def resolve_paths() -> Paths:
         zephyr_source=repo_root / "ports" / "zephyr",
         host_check_script=repo_root / "scripts" / "check_host_env.py",
         linux_check_script=repo_root / "scripts" / "check_linux_env.py",
+        pager_verify_script=repo_root / "scripts" / "verify_pager_boot.py",
     )
 
 
@@ -268,6 +270,23 @@ def command_print_plan(args: argparse.Namespace, paths: Paths) -> None:
         print(f"{label}: {shell_join(command)}")
 
 
+def command_check_board_baseline(args: argparse.Namespace, paths: Paths) -> None:
+    command_check_host_env(argparse.Namespace(mode="auto", json=False), paths)
+    command_build_all(args, paths)
+    if args.port:
+        command_flash_firmware(args, paths)
+        command_flash_appfs(args, paths)
+        run(
+            [
+                sys.executable,
+                str(paths.pager_verify_script),
+                "--port",
+                args.port,
+            ],
+            paths.repo_root,
+        )
+
+
 def command_check_linux_env(args: argparse.Namespace, paths: Paths) -> None:
     del args
     exit_code = run_passthrough([sys.executable, str(paths.linux_check_script)], paths.repo_root)
@@ -307,6 +326,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands = {
         "check-host-env": command_check_host_env,
         "check-linux-env": command_check_linux_env,
+        "check-board-baseline": command_check_board_baseline,
         "configure": command_configure,
         "build-firmware": command_build_firmware,
         "flash-firmware": command_flash_firmware,

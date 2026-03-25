@@ -1,15 +1,34 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <string>
 
 namespace aegis::ports::zephyr {
+
+enum class ZephyrBoardRuntimeFamily : uint8_t {
+    Generic,
+    TloraPager,
+};
+
+enum class ZephyrBoardDisplayBackendFamily : uint8_t {
+    Generic,
+    Pager,
+};
+
+enum class ZephyrBoardInputBackendFamily : uint8_t {
+    Generic,
+    PagerDirect,
+};
 
 struct ZephyrBoardBackendConfig {
     std::string backend_id;
     std::string target_board;
     std::string profile_device_id;
     std::string board_family;
+    ZephyrBoardRuntimeFamily runtime_family {ZephyrBoardRuntimeFamily::Generic};
+    ZephyrBoardDisplayBackendFamily display_backend_family {ZephyrBoardDisplayBackendFamily::Generic};
+    ZephyrBoardInputBackendFamily input_backend_family {ZephyrBoardInputBackendFamily::Generic};
     int display_width {0};
     int display_height {0};
     bool display_touch {false};

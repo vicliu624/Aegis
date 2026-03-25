@@ -2,16 +2,21 @@
 
 #include <stdexcept>
 
+#include "ports/zephyr/zephyr_board_descriptors.hpp"
 #include "ports/zephyr/zephyr_board_packages.hpp"
 #include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
 
 namespace aegis::ports::zephyr {
 
 ZephyrBoardRuntime& runtime_for_package(std::string_view package_id, platform::Logger& logger) {
-    if (package_id == "zephyr_tlora_pager_sx1262") {
-        return tlora_pager_board_runtime(logger);
+    const auto& descriptor = descriptor_for_package(package_id);
+    switch (descriptor.config.runtime_family) {
+        case ZephyrBoardRuntimeFamily::TloraPager:
+            return tlora_pager_board_runtime(logger);
+        case ZephyrBoardRuntimeFamily::Generic:
+        default:
+            return generic_zephyr_board_runtime(package_id);
     }
-    return generic_zephyr_board_runtime(package_id);
 }
 
 bool initialize_board_runtime(std::string_view package_id, platform::Logger& logger) {
@@ -26,11 +31,13 @@ bool initialize_board_runtime(std::string_view package_id, platform::Logger& log
 
 ZephyrBoardSupport resolve_zephyr_board_support(std::string_view package_id, platform::Logger& logger) {
     auto packages = make_zephyr_board_packages();
+    const auto& descriptor = descriptor_for_package(package_id);
     for (const auto& package : packages) {
         if (package->package_id() == package_id) {
             auto& runtime = runtime_for_package(package_id, logger);
             return ZephyrBoardSupport {
                 .package = package,
+                .descriptor = &descriptor,
                 .runtime = &runtime,
             };
         }

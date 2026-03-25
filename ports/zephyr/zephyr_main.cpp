@@ -12,6 +12,7 @@
 #include "ports/zephyr/zephyr_app_package_source.hpp"
 #include "ports/zephyr/zephyr_appfs.hpp"
 #include "ports/zephyr/zephyr_board_backend_config.hpp"
+#include "ports/zephyr/zephyr_board_descriptors.hpp"
 #include "ports/zephyr/zephyr_board_support.hpp"
 #include "ports/zephyr/zephyr_board_packages.hpp"
 #include "ports/zephyr/zephyr_boot_log_logger.hpp"
@@ -101,16 +102,17 @@ extern "C" int main(void) {
     const auto board_support =
         aegis::ports::zephyr::resolve_zephyr_board_support(aegis::ports::zephyr::kBootstrapDevicePackage,
                                                            boot_logger);
+    const auto& board_descriptor = *board_support.descriptor;
     auto& board_runtime = *board_support.runtime;
     aegis::ports::zephyr::set_active_zephyr_board_runtime(&board_runtime);
-    const auto board_config = board_runtime.config();
+    const auto board_config = board_descriptor.config;
     esp_rom_printf("AEGIS ROM: board config ready\n");
     printk("AEGIS TRACE: board config ready\n");
     const bool board_runtime_ready =
         aegis::ports::zephyr::initialize_board_runtime(aegis::ports::zephyr::kBootstrapDevicePackage,
                                                        boot_logger);
-    board_runtime.log_state("pre-display");
-    board_runtime.signal_boot_stage(1);
+    board_runtime.log_state(board_descriptor.bringup.runtime_ready_stage);
+    board_runtime.signal_boot_stage(board_descriptor.bringup.runtime_ready_signal_stage);
     printk("AEGIS TRACE: stage 1\n");
     aegis::ports::zephyr::ZephyrShellDisplayAdapter display_adapter(boot_logger,
                                                                     board_runtime,
@@ -126,7 +128,7 @@ extern "C" int main(void) {
         display_adapter.present_boot_log_screen("display-init");
         k_sleep(K_MSEC(3000));
     }
-    board_runtime.signal_boot_stage(2);
+    board_runtime.signal_boot_stage(board_descriptor.bringup.display_ready_signal_stage);
     printk("AEGIS TRACE: display init=%d\n", display_ready ? 1 : 0);
     boot_logger.info("zephyr", std::string("display adapter state: ") +
                                  (display_ready ? "ready" : "missing") + " " +
@@ -146,19 +148,19 @@ extern "C" int main(void) {
         core.attach_shell_presentation_sink(&display_adapter);
         display_adapter.present_boot_log_screen("core-attach");
     }
-    board_runtime.signal_boot_stage(3);
+    board_runtime.signal_boot_stage(board_descriptor.bringup.core_ready_signal_stage);
     esp_rom_printf("AEGIS ROM: core constructed\n");
     printk("AEGIS TRACE: core constructed\n");
     const bool input_ready = input_adapter.initialize();
-    board_runtime.log_state("post-input-init");
-    board_runtime.signal_boot_stage(4);
+    board_runtime.log_state(board_descriptor.bringup.input_ready_stage);
+    board_runtime.signal_boot_stage(board_descriptor.bringup.input_ready_signal_stage);
     esp_rom_printf("AEGIS ROM: input init=%d\n", input_ready ? 1 : 0);
     printk("AEGIS TRACE: input init=%d\n", input_ready ? 1 : 0);
     if (display_ready) {
         display_adapter.present_boot_log_screen("input-ready");
     }
     core.boot(aegis::ports::zephyr::kBootstrapDevicePackage);
-    board_runtime.signal_boot_stage(5);
+    board_runtime.signal_boot_stage(board_descriptor.bringup.interactive_ready_signal_stage);
     esp_rom_printf("AEGIS ROM: core boot complete\n");
     printk("AEGIS TRACE: core boot complete\n");
     boot_logger.info("zephyr",
@@ -188,8 +190,12 @@ extern "C" int main(void) {
                                  " error=" + ex.what());
         }
     }
-    boot_logger.info("zephyr", "shell self-test launching");
-    aegis::ports::zephyr::run_shell_presentation_selftest(core, boot_logger);
+    if (board_descriptor.bringup.run_shell_selftest) {
+        boot_logger.info("zephyr", "shell self-test launching");
+        aegis::ports::zephyr::run_shell_presentation_selftest(core, boot_logger);
+    } else {
+        boot_logger.info("zephyr", "shell self-test skipped by board bringup plan");
+    }
     boot_logger.attach_display(nullptr);
     boot_logger.info("zephyr", "boot log mirror detached for interactive runtime");
     input_adapter.enable_interactive_mode();

@@ -3,6 +3,8 @@
 #include <cerrno>
 #include <stdexcept>
 
+#include "ports/zephyr/zephyr_board_descriptors.hpp"
+
 namespace aegis::ports::zephyr {
 
 namespace {
@@ -10,20 +12,18 @@ namespace {
 ZephyrBoardRuntime* g_active_runtime = nullptr;
 
 ZephyrBoardBackendConfig config_for_package(std::string_view package_id) {
-    if (package_id == "zephyr_device_a") {
-        return make_device_a_backend_config();
-    }
-    if (package_id == "zephyr_device_b") {
-        return make_device_b_backend_config();
-    }
-    if (package_id == "zephyr_tlora_pager_sx1262") {
-        return make_tlora_pager_sx1262_backend_config();
+    try {
+        return descriptor_for_package(package_id).config;
+    } catch (const std::runtime_error&) {
     }
     return ZephyrBoardBackendConfig {
         .backend_id = std::string(package_id),
         .target_board = "unknown",
         .profile_device_id = std::string(package_id),
         .board_family = "generic-zephyr",
+        .runtime_family = ZephyrBoardRuntimeFamily::Generic,
+        .display_backend_family = ZephyrBoardDisplayBackendFamily::Generic,
+        .input_backend_family = ZephyrBoardInputBackendFamily::Generic,
     };
 }
 
@@ -99,11 +99,23 @@ bool ZephyrBoardRuntime::sd_card_present() const {
 }
 
 ZephyrShellDisplayBackendProfile ZephyrBoardRuntime::shell_display_backend_profile() const {
-    return ZephyrShellDisplayBackendProfile::Generic;
+    switch (config().display_backend_family) {
+        case ZephyrBoardDisplayBackendFamily::Pager:
+            return ZephyrShellDisplayBackendProfile::Pager;
+        case ZephyrBoardDisplayBackendFamily::Generic:
+        default:
+            return ZephyrShellDisplayBackendProfile::Generic;
+    }
 }
 
 ZephyrShellInputBackendProfile ZephyrBoardRuntime::shell_input_backend_profile() const {
-    return ZephyrShellInputBackendProfile::Generic;
+    switch (config().input_backend_family) {
+        case ZephyrBoardInputBackendFamily::PagerDirect:
+            return ZephyrShellInputBackendProfile::PagerDirect;
+        case ZephyrBoardInputBackendFamily::Generic:
+        default:
+            return ZephyrShellInputBackendProfile::Generic;
+    }
 }
 
 bool ZephyrBoardRuntime::keyboard_irq_asserted() const {

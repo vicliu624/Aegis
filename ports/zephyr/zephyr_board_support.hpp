@@ -6,6 +6,7 @@
 
 #include "device/packages/board_package.hpp"
 #include "platform/logging/logger.hpp"
+#include "ports/zephyr/zephyr_board_descriptors.hpp"
 #include "ports/zephyr/zephyr_board_runtime.hpp"
 
 namespace aegis::ports::zephyr {
@@ -14,6 +15,7 @@ inline constexpr char kBootstrapDevicePackage[] = "zephyr_tlora_pager_sx1262";
 
 struct ZephyrBoardSupport {
     device::BoardPackagePtr package;
+    const ZephyrBoardDescriptor* descriptor {nullptr};
     ZephyrBoardRuntime* runtime {nullptr};
 };
 

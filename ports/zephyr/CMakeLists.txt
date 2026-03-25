@@ -102,6 +102,7 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_logger.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_app_package_source.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_backend_config.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_descriptors.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_runtime.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_packages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_support.cpp
