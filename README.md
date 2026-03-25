@@ -120,6 +120,7 @@ The architecture is being shaped around one central idea:
 
 - [Architecture](./docs/architecture.md)
 - [App Model](./docs/app-model.md)
+- [Zephyr Onboarding](./docs/zephyr-onboarding.md)
 - [Zephyr Build Guide](./docs/building-zephyr.md)
 
 ---
