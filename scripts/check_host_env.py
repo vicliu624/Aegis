@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import pathlib
 import platform
@@ -201,6 +202,22 @@ def print_summary(prefix: str, context: HostContext, failed_results: list[CheckR
         print(f"{prefix}   next: {step}")
 
 
+def json_summary(context: HostContext, failed_results: list[CheckResult]) -> dict[str, object]:
+    return {
+        "host": context.platform_name,
+        "python_executable": context.python_executable,
+        "ready": not failed_results,
+        "missing_required_items": [result.label for result in failed_results],
+        "next_steps": format_next_steps(context, failed_results)
+        if failed_results
+        else [
+            "python scripts/build_zephyr.py configure"
+            if context.platform_name == "windows"
+            else "python3 scripts/build_zephyr.py configure"
+        ],
+    }
+
+
 def current_python_version_command(context: HostContext) -> list[str]:
     return [context.python_executable, "--version"]
 
@@ -213,18 +230,26 @@ def main() -> int:
         default="auto",
         help="Use `linux-like` to require Linux/WSL style checks. Default: auto",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON instead of the human-oriented report.",
+    )
     args = parser.parse_args()
 
     context = detect_host_context()
     prefix = "[aegis-host-check]"
-    print(f"{prefix} repo={context.repo_root}")
-    print(f"{prefix} host={context.platform_name}")
-    print(f"{prefix} python={context.python_executable}")
+    if not args.json:
+        print(f"{prefix} repo={context.repo_root}")
+        print(f"{prefix} host={context.platform_name}")
+        print(f"{prefix} python={context.python_executable}")
 
+    all_results: list[CheckResult] = []
     failed_results: list[CheckResult] = []
 
     if args.mode == "linux-like" and context.platform_name not in {"linux", "wsl"}:
-        print(f"{prefix} warning: linux-like mode requested on host={context.platform_name}")
+        if not args.json:
+            print(f"{prefix} warning: linux-like mode requested on host={context.platform_name}")
 
     checks = [
         ("python", current_python_version_command(context)),
@@ -237,78 +262,109 @@ def main() -> int:
 
     for label, command in checks:
         ok, detail = run_check(command)
-        suggestions = suggestions_for(context, label, detail)
-        print_check(prefix, label, ok, detail, suggestions)
+        suggestions = suggestions_for(context, label, detail) if not ok else []
+        if not args.json:
+            print_check(prefix, label, ok, detail, suggestions)
+        result = CheckResult(label=label, ok=ok, detail=detail, suggestions=suggestions)
+        all_results.append(result)
         if not ok:
-            failed_results.append(
-                CheckResult(label=label, ok=ok, detail=detail, suggestions=suggestions)
-            )
+            failed_results.append(result)
 
     zephyr_base = os.environ.get("ZEPHYR_BASE", "").strip()
     if zephyr_base:
         exists = pathlib.Path(zephyr_base).exists()
         detail = zephyr_base
-        print_check(
-            prefix,
-            "ZEPHYR_BASE",
-            exists,
-            detail,
-            suggestions_for(context, "ZEPHYR_BASE", detail),
-        )
+        if not args.json:
+            print_check(
+                prefix,
+                "ZEPHYR_BASE",
+                exists,
+                detail,
+                suggestions_for(context, "ZEPHYR_BASE", detail),
+            )
         if not exists:
-            failed_results.append(
+            result = CheckResult(
+                label="ZEPHYR_BASE",
+                ok=False,
+                detail=detail,
+                suggestions=suggestions_for(context, "ZEPHYR_BASE", detail),
+            )
+            all_results.append(result)
+            failed_results.append(result)
+        else:
+            all_results.append(
                 CheckResult(
                     label="ZEPHYR_BASE",
-                    ok=False,
+                    ok=True,
                     detail=detail,
-                    suggestions=suggestions_for(context, "ZEPHYR_BASE", detail),
+                    suggestions=[],
                 )
             )
     else:
         detail = "environment variable is not set"
         suggestions = suggestions_for(context, "ZEPHYR_BASE", detail)
-        print_check(
-            prefix,
-            "ZEPHYR_BASE",
-            False,
-            detail,
-            suggestions,
-        )
-        failed_results.append(
-            CheckResult(
-                label="ZEPHYR_BASE",
-                ok=False,
-                detail=detail,
-                suggestions=suggestions,
+        if not args.json:
+            print_check(
+                prefix,
+                "ZEPHYR_BASE",
+                False,
+                detail,
+                suggestions,
             )
-        )
+        result = CheckResult(label="ZEPHYR_BASE", ok=False, detail=detail, suggestions=suggestions)
+        all_results.append(result)
+        failed_results.append(result)
 
     sdk_dir = os.environ.get("ZEPHYR_SDK_INSTALL_DIR", "").strip()
     if sdk_dir:
         exists = pathlib.Path(sdk_dir).exists()
-        status = "ok" if exists else "warning"
-        print(f"{prefix} ZEPHYR_SDK_INSTALL_DIR: {status} - {sdk_dir}")
-        if not exists:
-            print(f"{prefix}   note: the path does not exist in this shell")
+        if not args.json:
+            status = "ok" if exists else "warning"
+            print(f"{prefix} ZEPHYR_SDK_INSTALL_DIR: {status} - {sdk_dir}")
+            if not exists:
+                print(f"{prefix}   note: the path does not exist in this shell")
     else:
-        print(f"{prefix} ZEPHYR_SDK_INSTALL_DIR: optional - not set")
+        if not args.json:
+            print(f"{prefix} ZEPHYR_SDK_INSTALL_DIR: optional - not set")
 
     mklittlefs_path = shutil.which("mklittlefs")
-    if mklittlefs_path:
-        print(f"{prefix} mklittlefs: ok - {mklittlefs_path}")
-    else:
-        print(f"{prefix} mklittlefs: optional - not found, python fallback may still work")
+    if not args.json:
+        if mklittlefs_path:
+            print(f"{prefix} mklittlefs: ok - {mklittlefs_path}")
+        else:
+            print(f"{prefix} mklittlefs: optional - not found, python fallback may still work")
 
-    print_summary(prefix, context, failed_results)
+    if args.json:
+        checks_payload = [
+            {
+                "label": result.label,
+                "ok": result.ok,
+                "detail": result.detail,
+                "suggestions": result.suggestions,
+            }
+            for result in all_results
+        ]
+        payload = {
+            "repo_root": str(context.repo_root),
+            **json_summary(context, failed_results),
+            "checks": checks_payload,
+            "zephyr_sdk_install_dir": sdk_dir or None,
+            "mklittlefs_path": mklittlefs_path,
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print_summary(prefix, context, failed_results)
 
     if failed_results:
-        print(
-            f"{prefix} result: not ready - fix the missing required items above before running "
-            "the Zephyr build flow"
-        )
+        if not args.json:
+            print(
+                f"{prefix} result: not ready - fix the missing required items above before running "
+                "the Zephyr build flow"
+            )
         return 1
 
-    print(f"{prefix} result: ready for repository-level Zephyr configure checks")
+    if not args.json:
+        print(f"{prefix} result: ready for repository-level Zephyr configure checks")
     return 0
 
 

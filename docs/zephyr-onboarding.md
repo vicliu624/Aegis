@@ -373,6 +373,12 @@ python scripts/build_zephyr.py check-host-env
 On Linux, WSL, or macOS, use `python3` instead if that is how the active interpreter is exposed in
 your shell.
 
+If you want machine-readable output for higher-level automation, the same command also supports:
+
+```bash
+python scripts/build_zephyr.py check-host-env --json
+```
+
 This performs a fast scan for the most common missing prerequisites:
 
 - Python

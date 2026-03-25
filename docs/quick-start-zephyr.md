@@ -97,6 +97,12 @@ python scripts/build_zephyr.py check-host-env
 This is the safest first step because it does not build anything. It verifies the host environment
 that the repository depends on.
 
+If you want machine-readable output for automation or wrapper scripts:
+
+```powershell
+python scripts/build_zephyr.py check-host-env --json
+```
+
 If that passes, you can optionally inspect the resolved build commands:
 
 ```powershell
@@ -166,6 +172,12 @@ python3 scripts/build_zephyr.py check-host-env
 This is the fastest way to catch the most common Linux onboarding misses before a full Zephyr
 configure.
 
+If you want machine-readable output for automation or wrapper scripts:
+
+```bash
+python3 scripts/build_zephyr.py check-host-env --json
+```
+
 If you want the older Linux-specific compatibility path, this still exists:
 
 ```bash
@@ -231,6 +243,12 @@ From the repository root inside the WSL distro shell:
 
 ```bash
 python3 scripts/build_zephyr.py check-host-env
+```
+
+If you want machine-readable output for automation or wrapper scripts:
+
+```bash
+python3 scripts/build_zephyr.py check-host-env --json
 ```
 
 If you specifically want the older Linux-only compatibility helper, it still exists:

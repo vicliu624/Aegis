@@ -34,17 +34,30 @@ def shell_join(command: Sequence[str]) -> str:
     return shlex.join(command)
 
 
-def run(command: Sequence[str], cwd: pathlib.Path) -> None:
-    print(f"[aegis-build] cwd={cwd}", flush=True)
-    print(f"[aegis-build] cmd={shell_join(command)}", flush=True)
+def run(command: Sequence[str], cwd: pathlib.Path, announce: bool = True) -> None:
+    if announce:
+        print(f"[aegis-build] cwd={cwd}", flush=True)
+        print(f"[aegis-build] cmd={shell_join(command)}", flush=True)
     subprocess.run(list(command), cwd=str(cwd), check=True)
 
 
-def run_passthrough(command: Sequence[str], cwd: pathlib.Path) -> int:
-    print(f"[aegis-build] cwd={cwd}", flush=True)
-    print(f"[aegis-build] cmd={shell_join(command)}", flush=True)
+def run_passthrough(command: Sequence[str], cwd: pathlib.Path, announce: bool = True) -> int:
+    if announce:
+        print(f"[aegis-build] cwd={cwd}", flush=True)
+        print(f"[aegis-build] cmd={shell_join(command)}", flush=True)
     result = subprocess.run(list(command), cwd=str(cwd), check=False)
     return result.returncode
+
+
+def run_with_hint(
+    command: Sequence[str], cwd: pathlib.Path, hint_lines: Sequence[str], announce: bool = True
+) -> None:
+    exit_code = run_passthrough(command, cwd, announce=announce)
+    if exit_code == 0:
+        return
+    for line in hint_lines:
+        print(line, flush=True)
+    raise SystemExit(exit_code)
 
 
 def resolve_paths() -> Paths:
@@ -193,11 +206,11 @@ def ensure_configured(args: argparse.Namespace, paths: Paths) -> None:
     cache_path = build_dir / "CMakeCache.txt"
     if cache_path.exists():
         return
-    run(configure_command(args, paths), paths.repo_root)
+    run_configure_with_hint(args, paths)
 
 
 def command_configure(args: argparse.Namespace, paths: Paths) -> None:
-    run(configure_command(args, paths), paths.repo_root)
+    run_configure_with_hint(args, paths)
 
 
 def command_build_firmware(args: argparse.Namespace, paths: Paths) -> None:
@@ -263,10 +276,26 @@ def command_check_linux_env(args: argparse.Namespace, paths: Paths) -> None:
 
 
 def command_check_host_env(args: argparse.Namespace, paths: Paths) -> None:
-    del args
-    exit_code = run_passthrough([sys.executable, str(paths.host_check_script)], paths.repo_root)
+    command = [sys.executable, str(paths.host_check_script)]
+    if getattr(args, "mode", ""):
+        command.extend(["--mode", args.mode])
+    if getattr(args, "json", False):
+        command.append("--json")
+    exit_code = run_passthrough(command, paths.repo_root, announce=not getattr(args, "json", False))
     if exit_code != 0:
         raise SystemExit(exit_code)
+
+
+def run_configure_with_hint(args: argparse.Namespace, paths: Paths) -> None:
+    hint_lines = [
+        "[aegis-build] hint: configure failed.",
+        "[aegis-build] hint: run the host self-check first and fix any reported prerequisites.",
+    ]
+    if os.name == "nt":
+        hint_lines.append("[aegis-build] hint: python scripts/build_zephyr.py check-host-env")
+    else:
+        hint_lines.append("[aegis-build] hint: python3 scripts/build_zephyr.py check-host-env")
+    run_with_hint(configure_command(args, paths), paths.repo_root, hint_lines)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -290,7 +319,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     for name in commands:
         subparser = subparsers.add_parser(name)
-        if name not in {"check-host-env", "check-linux-env"}:
+        if name == "check-host-env":
+            subparser.add_argument(
+                "--mode",
+                choices=("auto", "linux-like"),
+                default="auto",
+                help="Forwarded to the host self-check helper. Default: auto",
+            )
+            subparser.add_argument(
+                "--json",
+                action="store_true",
+                help="Emit machine-readable JSON from the host self-check helper.",
+            )
+        elif name != "check-linux-env":
             add_common_arguments(subparser)
         subparser.set_defaults(handler=commands[name])
 
