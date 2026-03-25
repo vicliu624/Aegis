@@ -118,8 +118,9 @@ The architecture is being shaped around one central idea:
 
 ## Documents
 
-- [`architecture.md`](./architecture.md)
-- [`app-model.md`](./app-model.md)
+- [Architecture](./docs/architecture.md)
+- [App Model](./docs/app-model.md)
+- [Zephyr Build Guide](./docs/building-zephyr.md)
 
 ---
 
