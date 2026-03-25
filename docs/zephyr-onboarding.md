@@ -353,7 +353,27 @@ If that import is missing and your Linux/WSL Python also lacks `pip`, install `p
 
 Once the host tools are installed, verify from the repository root.
 
-### 11.1 Inspect the planned build commands
+### 11.1 Minimal Linux or WSL self-check
+
+On Linux or WSL, start with:
+
+```bash
+python3 scripts/check_linux_env.py
+```
+
+This performs a fast scan for the most common missing prerequisites:
+
+- `python3`
+- `python3 -m pip`
+- `cmake`
+- `ninja`
+- `west`
+- `python3 -m esptool`
+- `ZEPHYR_BASE`
+
+It is meant to catch the most common onboarding misses before you run the full Zephyr configure step.
+
+### 11.2 Inspect the planned build commands
 
 ```bash
 python scripts/build_zephyr.py print-plan
@@ -361,7 +381,7 @@ python scripts/build_zephyr.py print-plan
 
 This should print the configured `cmake` and `cmake --build` commands without executing them.
 
-### 11.2 Run a real configure
+### 11.3 Run a real configure
 
 ```bash
 python scripts/build_zephyr.py configure
@@ -378,7 +398,7 @@ If it succeeds, your machine has at least:
 - toolchain discovery working
 - repository-specific Zephyr patch checks working
 
-### 11.3 Optional full build verification
+### 11.4 Optional full build verification
 
 ```bash
 python scripts/build_zephyr.py build-all --parallel 8
@@ -474,6 +494,7 @@ On minimal Linux or WSL environments, the missing piece is often simply `python3
 
 If you are preparing a new machine for someone else, hand off only after all of these pass:
 
+- `python3 scripts/check_linux_env.py` on Linux/WSL hosts
 - `python --version`
 - `cmake --version`
 - `ninja --version`
