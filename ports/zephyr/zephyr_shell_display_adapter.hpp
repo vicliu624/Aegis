@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <optional>
 #include <memory>
 #include <string_view>
 #include <string>
@@ -11,6 +12,7 @@
 
 #include <zephyr/device.h>
 #include <zephyr/drivers/spi.h>
+#include <zephyr/input/input.h>
 #include <zephyr/kernel.h>
 
 #include "platform/logging/logger.hpp"
@@ -18,6 +20,9 @@
 #include "ports/zephyr/zephyr_board_runtime.hpp"
 #include "ports/zephyr/zephyr_lvgl_shell_ui.hpp"
 #include "ports/zephyr/zephyr_shell_display_backend.hpp"
+#include "services/settings/zephyr_settings_service.hpp"
+#include "services/time/zephyr_time_service.hpp"
+#include "shell/control/shell_input_model.hpp"
 #include "shell/presentation/shell_presentation_sink.hpp"
 
 namespace aegis::ports::zephyr {
@@ -33,6 +38,8 @@ public:
     void record_boot_log(std::string_view category, std::string_view message);
     void present_boot_log_screen(std::string_view stage) const;
     void tick(uint32_t elapsed_ms);
+    [[nodiscard]] std::optional<shell::ShellNavigationAction> poll_ui_action();
+    void handle_touch_input_event(const input_event& event);
 
 private:
     enum class BackendKind {
@@ -138,10 +145,22 @@ private:
                            int height,
                            const uint16_t* pixels,
                            std::size_t count) const;
+    [[nodiscard]] bool read_touch_from_input_cache(int16_t& x, int16_t& y, bool& pressed) const;
+    void refresh_runtime_settings(bool force_log = false);
+    void register_interaction();
+    [[nodiscard]] std::string clock_text() const;
+    [[nodiscard]] ZephyrLvglShellUi::StatusIcons status_icons() const;
+    [[nodiscard]] static uint8_t brightness_percent_from_value(const std::string& value);
+    [[nodiscard]] static uint32_t screen_timeout_ms_from_value(const std::string& value);
+    [[nodiscard]] static int timezone_offset_minutes_from_value(const std::string& value);
+    [[nodiscard]] static bool time_format_24h_from_value(const std::string& value);
+    [[nodiscard]] uint16_t apply_brightness_to_rgb565(uint16_t rgb565) const;
 
     platform::Logger& logger_;
     ZephyrBoardRuntime& runtime_;
     ZephyrBoardBackendConfig config_;
+    services::ZephyrSettingsService ui_settings_;
+    services::ZephyrTimeService time_service_;
     std::unique_ptr<IZephyrShellDisplayBackend> display_backend_;
     std::unique_ptr<ZephyrLvglShellUi> lvgl_ui_;
     BackendKind backend_ {BackendKind::None};
@@ -161,6 +180,26 @@ private:
     mutable int scratch_band_height_ {0};
     mutable bool suppress_boot_log_capture_ {false};
     mutable k_mutex boot_log_mutex_ {};
+    mutable k_mutex touch_input_mutex_ {};
+    const struct device* touch_input_device_ {nullptr};
+    mutable bool touch_input_seen_ {false};
+    mutable bool touch_input_pressed_ {false};
+    mutable bool touch_input_have_x_ {false};
+    mutable bool touch_input_have_y_ {false};
+    mutable int16_t touch_input_raw_x_ {0};
+    mutable int16_t touch_input_raw_y_ {0};
+    bool display_backlight_enabled_ {true};
+    bool keyboard_backlight_enabled_ {true};
+    bool gps_enabled_ {true};
+    bool bluetooth_enabled_ {false};
+    uint8_t brightness_percent_ {100};
+    uint32_t screen_timeout_ms_ {60000};
+    bool time_format_24h_ {true};
+    int timezone_offset_minutes_ {0};
+    int64_t last_interaction_ms_ {0};
+    int64_t last_settings_refresh_ms_ {0};
+    k_msgq ui_action_queue_;
+    char ui_action_queue_buffer_[sizeof(shell::ShellNavigationAction) * 8] {};
 };
 
 }  // namespace aegis::ports::zephyr

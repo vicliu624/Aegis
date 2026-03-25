@@ -6,14 +6,19 @@
  */
 
 #include <zephyr/dt-bindings/i2c/i2c.h>
+#include <zephyr/dt-bindings/mipi_dbi/mipi_dbi.h>
+#include <zephyr/dt-bindings/pinctrl/esp32s3-pinctrl.h>
 
 / {
 	chosen {
+		zephyr,display = &tdeck_st7789v;
 		zephyr,console = &usb_serial;
 		zephyr,shell-uart = &usb_serial;
 	};
 
 	aliases {
+		display0 = &tdeck_st7789v;
+		touch0 = &tdeck_gt911;
 		lora0 = &spi2;
 		gps0 = &uart1;
 		audioout0 = &i2s0;
@@ -22,6 +27,43 @@
 		battery0 = &i2c0;
 		hostlink0 = &uart0;
 		rotary0 = &tdeck_trackball;
+	};
+
+	mipi_dbi {
+		compatible = "zephyr,mipi-dbi-spi";
+		status = "okay";
+		spi-dev = <&spi2>;
+		dc-gpios = <&gpio0 11 GPIO_ACTIVE_HIGH>;
+		write-only;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		tdeck_st7789v: st7789v@0 {
+			compatible = "sitronix,st7789v";
+			reg = <0>;
+			status = "okay";
+			mipi-max-frequency = <20000000>;
+			width = <320>;
+			height = <240>;
+			x-offset = <0>;
+			y-offset = <0>;
+			vcom = <0x1A>;
+			gctrl = <0x75>;
+			vrhs = <0x2C>;
+			vdvs = <0x20>;
+			mdac = <0x60>;
+			gamma = <0x01>;
+			colmod = <0x55>;
+			lcm = <0x13>;
+			porch-param = [0C 0C 00 33 33];
+			cmd2en-param = [5A 69 02 01];
+			pwctrl1-param = [A4 A1];
+			pvgam-param = [D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30];
+			nvgam-param = [D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 3E];
+			ram-param = [00 F0];
+			rgb-param = [40 02 14];
+			mipi-mode = "MIPI_DBI_MODE_SPI_4WIRE";
+		};
 	};
 
 	tdeck_trackball: gpio-keys {
@@ -93,13 +135,28 @@
 			output-low;
 		};
 	};
+
+	tdeck_ledc0_default: tdeck_ledc0_default {
+		group1 {
+			pinmux = <LEDC_CH0_GPIO42>;
+			output-low;
+		};
+	};
 };
 
 &i2c0 {
 	status = "okay";
-	clock-frequency = <I2C_BITRATE_FAST>;
+	clock-frequency = <I2C_BITRATE_STANDARD>;
 	pinctrl-0 = <&tdeck_i2c0_default>;
 	pinctrl-names = "default";
+
+	tdeck_gt911: touchscreen@5d {
+		compatible = "goodix,gt911";
+		reg = <0x5d>;
+		status = "okay";
+		irq-gpios = <&gpio0 16 GPIO_ACTIVE_LOW>;
+		alt-addr = <0x14>;
+	};
 };
 
 &uart1 {
@@ -119,6 +176,7 @@
 	status = "okay";
 	pinctrl-0 = <&tdeck_spim2_default>;
 	pinctrl-names = "default";
+	cs-gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
 };
 
 &i2s0 {
@@ -129,16 +187,21 @@
 	status = "okay";
 };
 
-&gpio0 {
-	tdeck_board_power {
-		gpio-hog;
-		gpios = <10 GPIO_ACTIVE_HIGH>;
-		output-high;
+&ledc0 {
+	status = "okay";
+	pinctrl-0 = <&tdeck_ledc0_default>;
+	pinctrl-names = "default";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel0@0 {
+		reg = <0x0>;
+		timer = <0>;
 	};
 };
 
-&gpio1 {
-	tdeck_display_backlight {
+&gpio0 {
+	tdeck_board_power {
 		gpio-hog;
 		gpios = <10 GPIO_ACTIVE_HIGH>;
 		output-high;

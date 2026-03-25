@@ -10,8 +10,15 @@ void AegisShell::set_presentation_sink(ShellPresentationSink* sink) {
     presentation_sink_ = sink;
 }
 
+void AegisShell::bind_services(const device::ServiceBindingRegistry& services) {
+    settings_service_ = services.settings();
+    notification_service_ = services.notifications();
+    reload_settings_app();
+}
+
 void AegisShell::configure_for_device(const device::DeviceProfile& profile,
                                       const device::ShellSurfaceProfile& shell_surface_profile) {
+    device_profile_ = profile;
     settings_.set_entries(shell_surface_profile.settings_entries);
     status_.set_items(shell_surface_profile.status_items);
     notifications_.set_entries(shell_surface_profile.notification_entries);
@@ -26,10 +33,20 @@ void AegisShell::configure_for_device(const device::DeviceProfile& profile,
         actions += std::string(to_string(action));
     }
     logger_.info("shell", actions);
+    initialize_system_launcher();
+    initialize_settings_app();
+    reload_settings_app();
     present_frame("home", "profile=" + profile.device_id + " input=" + profile.input.primary_input);
 }
 
 void AegisShell::present_home() const {
+    if (startup_page_launcher_) {
+        controller_.show_launcher();
+        logger_.info("shell", "startup preference redirected home to launcher");
+        log_launcher_focus();
+        present_frame("launcher", "startup=apps");
+        return;
+    }
     controller_.boot_to_home();
     logger_.info("shell", "home surface ready");
     present_frame("home", "system ready");
@@ -81,12 +98,9 @@ void AegisShell::present_launcher_catalog(const core::AppCatalog& catalog) {
 
 void AegisShell::load_launcher_catalog(const core::AppCatalog& catalog) {
     launcher_ = make_launcher_model(catalog);
-    logger_.info("shell", "launcher catalog loaded entries=" + std::to_string(launcher_.entries().size()));
-    if (const auto* focused = launcher_.focused_entry()) {
-        logger_.info("shell",
-                     "launcher default focus=" + focused->descriptor.manifest.app_id + " index=" +
-                         std::to_string(launcher_.focus_index()));
-    }
+    logger_.info("shell",
+                 "external app catalog loaded entries=" + std::to_string(launcher_.entries().size()) +
+                     " launcher presents system built-ins");
 }
 
 void AegisShell::enter_app(const std::string& app_id) const {
@@ -145,14 +159,37 @@ std::optional<std::string> AegisShell::handle_action(ShellNavigationAction actio
 
     switch (action) {
         case ShellNavigationAction::MoveNext:
-            if (controller_.navigation_state().surface() == ShellSurface::Launcher && launcher_.focus_next()) {
+            if (controller_.navigation_state().surface() == ShellSurface::Launcher && focus_system_launcher_next()) {
                 log_launcher_focus();
+            }
+            if (controller_.navigation_state().surface() == ShellSurface::Settings &&
+                settings_app_.focus_next(launcher_focus_wrap_)) {
+                present_frame("settings", "built-in settings");
             }
             return std::nullopt;
         case ShellNavigationAction::MovePrevious:
             if (controller_.navigation_state().surface() == ShellSurface::Launcher &&
-                launcher_.focus_previous()) {
+                focus_system_launcher_previous()) {
                 log_launcher_focus();
+            }
+            if (controller_.navigation_state().surface() == ShellSurface::Settings &&
+                settings_app_.focus_previous(launcher_focus_wrap_)) {
+                present_frame("settings", "built-in settings");
+            }
+            return std::nullopt;
+        case ShellNavigationAction::PrimaryAction:
+            if (controller_.navigation_state().surface() == ShellSurface::Settings) {
+                apply_settings_app();
+                present_frame("settings", "built-in settings");
+            }
+            if (controller_.navigation_state().surface() == ShellSurface::Launcher) {
+                if (const auto* focused = focused_system_launcher_entry(); focused != nullptr &&
+                    focused->target == SystemLauncherTarget::Settings) {
+                    controller_.show_settings();
+                    reload_settings_app();
+                    log_surface_summary();
+                    present_frame("settings", "built-in settings");
+                }
             }
             return std::nullopt;
         case ShellNavigationAction::Select:
@@ -164,13 +201,20 @@ std::optional<std::string> AegisShell::handle_action(ShellNavigationAction actio
                 return std::nullopt;
             }
             if (controller_.navigation_state().surface() == ShellSurface::Launcher) {
-                if (const auto* focused = launcher_.focused_entry();
-                    focused != nullptr && focused->state == LauncherEntryState::Visible) {
-                    logger_.info("shell",
-                                 "launcher selected app " + focused->descriptor.manifest.app_id);
-                    present_frame("app",
-                                  "launch=" + focused->descriptor.manifest.display_name);
-                    return focused->descriptor.manifest.app_id;
+                if (const auto* focused = focused_system_launcher_entry(); focused != nullptr) {
+                    logger_.info("shell", "launcher selected builtin " + focused->id);
+                    if (focused->target == SystemLauncherTarget::Settings) {
+                        controller_.show_settings();
+                        reload_settings_app();
+                        log_surface_summary();
+                        present_frame("settings", "built-in settings");
+                    }
+                    return std::nullopt;
+                }
+            }
+            if (controller_.navigation_state().surface() == ShellSurface::Settings) {
+                if (settings_app_.cycle_focused_option()) {
+                    present_frame("settings", "built-in settings");
                 }
             }
             return std::nullopt;
@@ -206,8 +250,9 @@ std::optional<std::string> AegisShell::handle_action(ShellNavigationAction actio
             return std::nullopt;
         case ShellNavigationAction::OpenSettings:
             controller_.show_settings();
+            reload_settings_app();
             log_surface_summary();
-            present_frame("settings", "system settings");
+            present_frame("settings", "built-in settings");
             return std::nullopt;
         case ShellNavigationAction::OpenNotifications:
             controller_.show_notifications();
@@ -221,6 +266,10 @@ std::optional<std::string> AegisShell::handle_action(ShellNavigationAction actio
 
 const SettingsModel& AegisShell::settings_model() const {
     return settings_;
+}
+
+const SettingsAppModel& AegisShell::settings_app_model() const {
+    return settings_app_;
 }
 
 const StatusModel& AegisShell::status_model() const {
@@ -290,39 +339,49 @@ ShellPresentationFrame AegisShell::build_frame(std::string headline, std::string
             frame.lines.push_back({.text = "Menu returns home"});
             break;
         case ShellSurface::Launcher: {
-            frame.context = "catalog rotary=nav center=launch";
+            frame.context = "system built-ins";
             frame.headline = "launcher";
-            frame.detail = "apps=" + std::to_string(launcher_.entries().size());
-            const auto entries = launcher_.entries();
-            for (std::size_t index = 0; index < entries.size() && frame.lines.size() < 8; ++index) {
-                const auto& entry = entries[index];
+            frame.detail = "apps=" + std::to_string(system_launcher_.size());
+            for (std::size_t index = 0; index < system_launcher_.size() && frame.lines.size() < 8; ++index) {
+                const auto& entry = system_launcher_[index];
                 std::string line =
-                    (index == launcher_.focus_index() ? "[*] " : "[ ] ") +
-                    std::to_string(index + 1) + " " + entry.descriptor.manifest.display_name;
-                if (entry.state != LauncherEntryState::Visible && !entry.reason.empty()) {
-                    line += " [" + entry.reason + "]";
+                    (index == system_launcher_focus_index_ ? "[*] " : "[ ] ") +
+                    std::to_string(index + 1) + " " + entry.label;
+                if (!entry.subtitle.empty()) {
+                    line += " [" + entry.subtitle + "]";
                 }
-                frame.lines.push_back(
-                    {.text = std::move(line), .emphasized = index == launcher_.focus_index()});
+                frame.lines.push_back({.text = std::move(line),
+                                       .emphasized = index == system_launcher_focus_index_});
             }
             if (frame.lines.empty()) {
                 frame.lines.push_back({.text = "No launcher entries", .emphasized = true});
-            } else if (const auto* focused = launcher_.focused_entry();
-                       focused != nullptr && !focused->descriptor.manifest.description.empty() &&
-                       frame.lines.size() < 8) {
-                frame.lines.push_back(
-                    shell::ShellPresentationLine {.text = "about: " +
-                                                          focused->descriptor.manifest.description});
             }
             break;
         }
         case ShellSurface::Settings:
-            frame.context = "device settings";
-            for (const auto& entry : settings_.entries()) {
-                if (!entry.visible || frame.lines.size() >= 8) {
+            frame.context = "built-in settings app";
+            frame.detail = "dirty=" + std::to_string(settings_app_.dirty_count());
+            for (std::size_t index = 0; index < settings_app_.entries().size() && frame.lines.size() < 8; ++index) {
+                const auto& entry = settings_app_.entries()[index];
+                if (!entry.visible) {
                     continue;
                 }
-                frame.lines.push_back({.text = entry.label});
+                std::string line =
+                    (index == settings_app_.focus_index() ? "[*] " : "[ ] ") +
+                    entry.label + ": " + settings_app_.value_for(entry);
+                if (entry.draft_index != entry.committed_index) {
+                    line += " *";
+                }
+                frame.lines.push_back(
+                    {.text = std::move(line), .emphasized = index == settings_app_.focus_index()});
+            }
+            if (show_advanced_settings_) {
+                for (const auto& entry : settings_.entries()) {
+                    if (!entry.visible || frame.lines.size() >= 8) {
+                        continue;
+                    }
+                    frame.lines.push_back({.text = "Section: " + entry.label});
+                }
             }
             break;
         case ShellSurface::Notifications:
@@ -373,12 +432,114 @@ ShellPresentationFrame AegisShell::build_frame(std::string headline, std::string
     return frame;
 }
 
+void AegisShell::initialize_system_launcher() {
+    system_launcher_ = {
+        {.id = "apps", .label = "Apps", .subtitle = "catalog soon"},
+        {.id = "files", .label = "Files", .subtitle = "storage soon"},
+        {.id = "settings", .label = "Settings", .subtitle = "built-in app", .available = true, .target = SystemLauncherTarget::Settings},
+        {.id = "radio", .label = "Radio", .subtitle = "soon"},
+        {.id = "tools", .label = "Tools", .subtitle = "soon"},
+        {.id = "device", .label = "Device", .subtitle = "soon"},
+    };
+    system_launcher_focus_index_ = 0;
+    for (std::size_t index = 0; index < system_launcher_.size(); ++index) {
+        if (system_launcher_[index].available) {
+            system_launcher_focus_index_ = index;
+            break;
+        }
+    }
+}
+
+const AegisShell::SystemLauncherEntry* AegisShell::focused_system_launcher_entry() const {
+    if (system_launcher_.empty() || system_launcher_focus_index_ >= system_launcher_.size()) {
+        return nullptr;
+    }
+    return &system_launcher_[system_launcher_focus_index_];
+}
+
+bool AegisShell::focus_system_launcher_next() {
+    if (system_launcher_.empty()) {
+        return false;
+    }
+    if (launcher_focus_wrap_) {
+        system_launcher_focus_index_ = (system_launcher_focus_index_ + 1) % system_launcher_.size();
+        return true;
+    }
+    if ((system_launcher_focus_index_ + 1) >= system_launcher_.size()) {
+        return false;
+    }
+    ++system_launcher_focus_index_;
+    return true;
+}
+
+bool AegisShell::focus_system_launcher_previous() {
+    if (system_launcher_.empty()) {
+        return false;
+    }
+    if (launcher_focus_wrap_) {
+        system_launcher_focus_index_ =
+            (system_launcher_focus_index_ + system_launcher_.size() - 1) % system_launcher_.size();
+        return true;
+    }
+    if (system_launcher_focus_index_ == 0) {
+        return false;
+    }
+    --system_launcher_focus_index_;
+    return true;
+}
+
+void AegisShell::initialize_settings_app() {
+    settings_app_.set_entries({
+        {.id = "screen_brightness", .label = "Screen Brightness", .options = {"20%", "40%", "60%", "80%", "100%"}, .committed_index = 3, .draft_index = 3},
+        {.id = "keyboard_backlight", .label = "Keyboard Backlight", .options = {"Off", "On"}, .committed_index = 1, .draft_index = 1},
+        {.id = "screen_timeout", .label = "Screen Timeout", .options = {"15 sec", "30 sec", "1 min", "2 min", "5 min", "Never"}, .committed_index = 2, .draft_index = 2},
+        {.id = "bluetooth", .label = "Bluetooth", .options = {"Off", "On"}, .committed_index = 0, .draft_index = 0},
+        {.id = "gps", .label = "GPS", .options = {"Off", "On"}, .committed_index = 1, .draft_index = 1},
+        {.id = "timezone", .label = "Time Zone", .options = {"UTC-08:00", "UTC", "Asia/Shanghai", "Asia/Tokyo", "Europe/Berlin", "America/New_York"}, .committed_index = 2, .draft_index = 2},
+        {.id = "time_format", .label = "Time Format", .options = {"12-hour", "24-hour"}, .committed_index = 1, .draft_index = 1},
+    });
+}
+
+void AegisShell::reload_settings_app() {
+    settings_app_.load(settings_service_);
+
+    if (const auto* startup_page = settings_app_.find_entry("startup_page"); startup_page != nullptr) {
+        startup_page_launcher_ = settings_app_.value_for(*startup_page) == "Apps";
+    }
+    if (const auto* focus_wrap = settings_app_.find_entry("focus_wrap"); focus_wrap != nullptr) {
+        launcher_focus_wrap_ = settings_app_.value_for(*focus_wrap) == "On";
+    }
+    if (const auto* advanced_sections = settings_app_.find_entry("advanced_sections");
+        advanced_sections != nullptr) {
+        show_advanced_settings_ = settings_app_.value_for(*advanced_sections) == "On";
+    }
+}
+
+void AegisShell::apply_settings_app() {
+    if (!settings_app_.apply(settings_service_)) {
+        logger_.info("shell", "settings app apply skipped no changes");
+        return;
+    }
+    reload_settings_app();
+    std::string summary = "settings app applied";
+    for (const auto& entry : settings_app_.entries()) {
+        summary += " ";
+        summary += entry.id;
+        summary += "=";
+        summary += settings_app_.value_for(entry);
+    }
+    logger_.info("shell", summary);
+    if (notification_service_ != nullptr) {
+        notification_service_->notify("Settings", "Built-in settings applied");
+    }
+}
+
 void AegisShell::log_launcher_focus() const {
-    if (const auto* focused = launcher_.focused_entry()) {
+    if (const auto* focused = focused_system_launcher_entry()) {
         logger_.info("shell",
-                     "launcher focus=" + focused->descriptor.manifest.app_id + " index=" +
-                         std::to_string(launcher_.focus_index()));
-        present_frame("launcher", "catalog");
+                     "launcher focus=" + focused->id + " index=" +
+                         std::to_string(system_launcher_focus_index_));
+        present_frame("launcher", "system");
     }
 }
 

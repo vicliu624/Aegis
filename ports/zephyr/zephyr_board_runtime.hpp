@@ -63,6 +63,13 @@ public:
     [[nodiscard]] virtual bool audio_ready() const;
     [[nodiscard]] virtual bool hostlink_ready() const;
     [[nodiscard]] virtual bool sd_card_present() const;
+    [[nodiscard]] virtual bool set_display_backlight_enabled(bool enabled) const;
+    [[nodiscard]] virtual bool set_display_brightness_percent(uint8_t percent) const;
+    [[nodiscard]] virtual bool set_keyboard_backlight_enabled(bool enabled) const;
+    [[nodiscard]] virtual bool set_bluetooth_enabled(bool enabled);
+    [[nodiscard]] virtual bool bluetooth_enabled() const;
+    [[nodiscard]] virtual bool set_gps_enabled(bool enabled);
+    [[nodiscard]] virtual bool gps_enabled() const;
 
     [[nodiscard]] virtual ZephyrShellDisplayBackendProfile shell_display_backend_profile() const;
     [[nodiscard]] virtual ZephyrShellInputBackendProfile shell_input_backend_profile() const;
@@ -70,6 +77,7 @@ public:
     [[nodiscard]] virtual bool keyboard_pending_event_count(uint8_t& pending) const;
     [[nodiscard]] virtual bool keyboard_read_event(uint8_t& raw_event) const;
     [[nodiscard]] virtual bool keyboard_read_character(uint8_t& raw_character) const;
+    [[nodiscard]] virtual bool touch_read_point(int16_t& x, int16_t& y, bool& pressed) const;
     [[nodiscard]] virtual int with_coordination_domain(
         ZephyrBoardCoordinationDomain domain,
         k_timeout_t timeout,

@@ -42,7 +42,13 @@ public:
     [[nodiscard]] bool storage_ready() const override;
     [[nodiscard]] bool audio_ready() const override;
     [[nodiscard]] bool hostlink_ready() const override;
+    [[nodiscard]] bool set_display_backlight_enabled(bool enabled) const override;
+    [[nodiscard]] bool set_display_brightness_percent(uint8_t percent) const override;
+    [[nodiscard]] bool set_keyboard_backlight_enabled(bool enabled) const override;
+    [[nodiscard]] bool set_gps_enabled(bool enabled) override;
+    [[nodiscard]] bool gps_enabled() const override;
     [[nodiscard]] bool keyboard_read_character(uint8_t& raw_character) const override;
+    [[nodiscard]] bool touch_read_point(int16_t& x, int16_t& y, bool& pressed) const override;
     [[nodiscard]] int with_coordination_domain(ZephyrBoardCoordinationDomain domain,
                                                k_timeout_t timeout,
                                                std::string_view operation,
@@ -57,9 +63,13 @@ private:
     const struct device* gpio_device_ {nullptr};
     const struct device* i2c_device_ {nullptr};
     const struct device* adc_device_ {nullptr};
+    const struct device* pwm_device_ {nullptr};
     bool initialized_ {false};
     bool touch_ready_ {false};
     bool battery_ready_ {false};
+    bool gps_enabled_ {true};
+    mutable bool display_backlight_enabled_ {true};
+    mutable uint8_t display_brightness_percent_ {100};
     ZephyrTdeckTransferCoordinator transfer_coordinator_;
     ZephyrTdeckBoardControlProvider board_control_provider_;
 };

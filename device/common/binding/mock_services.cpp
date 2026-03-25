@@ -100,6 +100,10 @@ bool MockTimeService::available() const {
     return available_;
 }
 
+std::optional<int64_t> MockTimeService::current_unix_ms() const {
+    return std::nullopt;
+}
+
 std::string MockTimeService::describe_source() const {
     return source_;
 }

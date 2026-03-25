@@ -80,6 +80,7 @@ ShellSurfaceProfile MockDeviceAPackage::create_shell_surface_profile() const {
             {
                 shell::ShellNavigationAction::MoveNext,
                 shell::ShellNavigationAction::MovePrevious,
+                shell::ShellNavigationAction::PrimaryAction,
                 shell::ShellNavigationAction::Select,
                 shell::ShellNavigationAction::Back,
                 shell::ShellNavigationAction::OpenMenu,
@@ -186,6 +187,7 @@ ShellSurfaceProfile MockDeviceBPackage::create_shell_surface_profile() const {
             {
                 shell::ShellNavigationAction::MoveNext,
                 shell::ShellNavigationAction::MovePrevious,
+                shell::ShellNavigationAction::PrimaryAction,
                 shell::ShellNavigationAction::Select,
                 shell::ShellNavigationAction::Back,
                 shell::ShellNavigationAction::OpenSettings,

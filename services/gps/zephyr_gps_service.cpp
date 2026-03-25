@@ -15,7 +15,7 @@ bool ZephyrGpsService::available() const {
     }
     if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
         runtime->config().backend_id == config_.backend_id) {
-        return runtime->gps_ready();
+        return runtime->gps_enabled() && runtime->gps_ready();
     }
     return true;
 }
@@ -24,7 +24,8 @@ std::string ZephyrGpsService::backend_name() const {
     if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
         runtime->config().backend_id == config_.backend_id) {
         return std::string("zephyr-board-gps:device=") + config_.gps_device_name +
-               ",power=" + (runtime->gps_ready() ? "ready" : "gated") +
+               ",power=" + (runtime->gps_enabled() ? "enabled" : "disabled") +
+               ",service=" + (runtime->gps_ready() ? "ready" : "gated") +
                ",expander=" + (runtime->expander_ready() ? "ready" : "missing");
     }
     return available() ? "zephyr-device:" + config_.gps_device_name

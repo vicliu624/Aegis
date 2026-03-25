@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/pwm.h>
 
 #include "platform/logging/logger.hpp"
 #include "ports/zephyr/zephyr_board_backend_config.hpp"
@@ -71,6 +72,7 @@ public:
     void bind_gpio_device(const struct device* gpio_device);
     void bind_i2c_device(const struct device* i2c_device);
     void bind_adc_device(const struct device* adc_device);
+    void bind_pwm_device(const struct device* pwm_device);
     [[nodiscard]] bool ready() const;
     [[nodiscard]] bool keyboard_ready() const;
     [[nodiscard]] bool touch_ready() const;
@@ -87,10 +89,13 @@ public:
     [[nodiscard]] bool probe_touch_controller();
     [[nodiscard]] bool probe_battery_controller();
     [[nodiscard]] bool keyboard_read_character(uint8_t& raw_character) const;
+    [[nodiscard]] bool read_touch_point(int16_t& x, int16_t& y, bool& pressed) const;
     [[nodiscard]] std::optional<int> battery_percent() const;
     [[nodiscard]] std::optional<int> battery_voltage_mv() const;
     [[nodiscard]] bool battery_charging() const;
     [[nodiscard]] bool set_power_enabled(TdeckPowerChannel channel, bool enabled) const;
+    [[nodiscard]] bool set_display_backlight_percent(uint8_t percent) const;
+    [[nodiscard]] bool set_keyboard_backlight_level(uint8_t level) const;
     [[nodiscard]] bool power_enabled(TdeckPowerChannel channel) const;
 
 private:
@@ -109,6 +114,19 @@ private:
                                           TdeckBoardControlParticipant participant,
                                           std::string_view operation) const;
     [[nodiscard]] bool probe_gt911(uint16_t address, std::string_view operation) const;
+    [[nodiscard]] bool read_gt911_register(uint16_t address,
+                                           uint16_t reg,
+                                           uint8_t* buffer,
+                                           std::size_t size,
+                                           std::string_view operation) const;
+    [[nodiscard]] bool read_gt911_register8(uint16_t address,
+                                            uint16_t reg,
+                                            uint8_t& value,
+                                            std::string_view operation) const;
+    [[nodiscard]] bool read_gt911_register16(uint16_t address,
+                                             uint16_t reg,
+                                             uint16_t& value,
+                                             std::string_view operation) const;
     [[nodiscard]] bool read_i2c_register(uint16_t address,
                                          uint8_t reg,
                                          TdeckBoardControlParticipant participant,
@@ -125,15 +143,20 @@ private:
                                                 bool enabled,
                                                 TdeckBoardControlParticipant participant,
                                                 std::string_view operation) const;
+    void pulse_touch_irq_wakeup() const;
+    void log_touch_diagnostics(uint16_t address) const;
     [[nodiscard]] bool probe_battery_adc();
     [[nodiscard]] std::optional<int> read_battery_adc_mv() const;
     [[nodiscard]] int battery_percent_from_mv(int mv) const;
+    [[nodiscard]] bool set_display_backlight_percent_unlocked(uint8_t percent) const;
+    [[nodiscard]] bool set_keyboard_backlight_level_unlocked(uint8_t level) const;
 
     platform::Logger& logger_;
     ZephyrBoardBackendConfig config_;
     const struct device* gpio_device_ {nullptr};
     const struct device* i2c_device_ {nullptr};
     const struct device* adc_device_ {nullptr};
+    const struct device* pwm_device_ {nullptr};
     mutable k_mutex mutex_ {};
     mutable TdeckBoardControlParticipant owner_ {TdeckBoardControlParticipant::Unknown};
     bool keyboard_ready_ {false};
@@ -141,7 +164,13 @@ private:
     bool battery_ready_ {false};
     bool battery_via_adc_ {false};
     uint16_t touch_address_ {0};
+    mutable uint8_t last_touch_status_ {0xFF};
+    mutable int last_touch_irq_level_ {-2};
+    mutable uint32_t last_touch_poll_log_ms_ {0};
+    mutable uint32_t last_touch_zero_count_dump_ms_ {0};
     mutable std::array<bool, 3> power_state_ {};
+    mutable uint8_t display_backlight_percent_ {100};
+    mutable uint8_t keyboard_backlight_level_ {127};
 };
 
 }  // namespace aegis::ports::zephyr

@@ -23,6 +23,8 @@ std::string_view to_string(ShellNavigationAction action) {
             return "move_next";
         case ShellNavigationAction::MovePrevious:
             return "move_previous";
+        case ShellNavigationAction::PrimaryAction:
+            return "primary_action";
         case ShellNavigationAction::Select:
             return "select";
         case ShellNavigationAction::Back:
@@ -42,6 +44,7 @@ bool try_parse_shell_action(std::string_view value, ShellNavigationAction& actio
     static constexpr ShellNavigationAction all[] {
         ShellNavigationAction::MoveNext,
         ShellNavigationAction::MovePrevious,
+        ShellNavigationAction::PrimaryAction,
         ShellNavigationAction::Select,
         ShellNavigationAction::Back,
         ShellNavigationAction::OpenMenu,

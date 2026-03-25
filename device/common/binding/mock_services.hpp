@@ -89,6 +89,7 @@ class MockTimeService : public services::ITimeService {
 public:
     MockTimeService(bool available, std::string source);
     [[nodiscard]] bool available() const override;
+    [[nodiscard]] std::optional<int64_t> current_unix_ms() const override;
     [[nodiscard]] std::string describe_source() const override;
 
 private:

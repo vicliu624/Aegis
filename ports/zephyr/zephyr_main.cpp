@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 
+#include <zephyr/fs/fs.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/settings/settings.h>
@@ -51,6 +52,37 @@ void run_shell_presentation_selftest(aegis::core::AegisCore& core, aegis::platfo
 
 }  // namespace aegis::ports::zephyr
 
+namespace {
+
+bool ensure_boot_directory(const char* path) {
+    fs_dirent entry {};
+    const int stat_rc = fs_stat(path, &entry);
+    if (stat_rc == 0) {
+        return entry.type == FS_DIR_ENTRY_DIR;
+    }
+    const int mkdir_rc = fs_mkdir(path);
+    return mkdir_rc == 0 || mkdir_rc == -EEXIST;
+}
+
+bool ensure_boot_file(const char* path) {
+    fs_dirent entry {};
+    const int stat_rc = fs_stat(path, &entry);
+    if (stat_rc == 0) {
+        return entry.type == FS_DIR_ENTRY_FILE;
+    }
+
+    fs_file_t file;
+    fs_file_t_init(&file);
+    const int open_rc = fs_open(&file, path, FS_O_CREATE | FS_O_RDWR);
+    if (open_rc != 0) {
+        return false;
+    }
+    (void)fs_close(&file);
+    return true;
+}
+
+}  // namespace
+
 extern "C" int main(void) {
     esp_rom_printf("AEGIS ROM: main entered\n");
     printk("AEGIS TRACE: main entered\n");
@@ -58,12 +90,24 @@ extern "C" int main(void) {
     esp_rom_printf("AEGIS ROM: logger ready\n");
     printk("AEGIS TRACE: logger ready\n");
     aegis::ports::zephyr::ZephyrBootLogLogger boot_logger(logger);
-    settings_subsys_init();
-    esp_rom_printf("AEGIS ROM: settings ready\n");
-    printk("AEGIS TRACE: settings ready\n");
     aegis::ports::zephyr::ZephyrAppFs appfs(boot_logger);
     const bool appfs_ready = appfs.mount();
     printk("AEGIS TRACE: appfs mount=%d\n", appfs_ready ? 1 : 0);
+    if (appfs_ready) {
+        const bool settings_dir_ready = ensure_boot_directory("/lfs/settings");
+        printk("AEGIS TRACE: settings dir=%d\n", settings_dir_ready ? 1 : 0);
+        boot_logger.info("zephyr",
+                         std::string("settings dir ready: ") +
+                             (settings_dir_ready ? "yes" : "no"));
+        const bool settings_file_ready = settings_dir_ready && ensure_boot_file("/lfs/settings/run");
+        printk("AEGIS TRACE: settings file=%d\n", settings_file_ready ? 1 : 0);
+        boot_logger.info("zephyr",
+                         std::string("settings file ready: ") +
+                             (settings_file_ready ? "yes" : "no"));
+    }
+    settings_subsys_init();
+    esp_rom_printf("AEGIS ROM: settings ready\n");
+    printk("AEGIS TRACE: settings ready\n");
 
     std::vector<std::string> app_package_roots;
     if (appfs_ready) {
@@ -208,6 +252,9 @@ extern "C" int main(void) {
     int heartbeat_ticks = 0;
     int loop_heartbeats = 0;
     while (true) {
+        if (const auto ui_action = display_adapter.poll_ui_action(); ui_action.has_value()) {
+            core.run_shell_action_sequence({*ui_action});
+        }
         if (const auto action = input_adapter.poll_action(); action.has_value()) {
             core.run_shell_action_sequence({*action});
         }

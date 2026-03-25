@@ -3,6 +3,10 @@
 #include <cerrno>
 #include <stdexcept>
 
+#if defined(CONFIG_BT)
+#include <zephyr/bluetooth/bluetooth.h>
+#endif
+
 #include "ports/zephyr/zephyr_board_descriptors.hpp"
 
 namespace aegis::ports::zephyr {
@@ -10,6 +14,19 @@ namespace aegis::ports::zephyr {
 namespace {
 
 ZephyrBoardRuntime* g_active_runtime = nullptr;
+
+#if defined(CONFIG_BT)
+k_mutex g_bluetooth_state_mutex;
+bool g_bluetooth_state_mutex_ready = false;
+bool g_bluetooth_stack_enabled = false;
+
+void ensure_bluetooth_mutex_ready() {
+    if (!g_bluetooth_state_mutex_ready) {
+        k_mutex_init(&g_bluetooth_state_mutex);
+        g_bluetooth_state_mutex_ready = true;
+    }
+}
+#endif
 
 ZephyrBoardBackendConfig config_for_package(std::string_view package_id) {
     try {
@@ -118,6 +135,62 @@ bool ZephyrBoardRuntime::sd_card_present() const {
     return storage_ready();
 }
 
+bool ZephyrBoardRuntime::set_display_backlight_enabled(bool enabled) const {
+    (void)enabled;
+    return false;
+}
+
+bool ZephyrBoardRuntime::set_display_brightness_percent(uint8_t percent) const {
+    (void)percent;
+    return false;
+}
+
+bool ZephyrBoardRuntime::set_keyboard_backlight_enabled(bool enabled) const {
+    (void)enabled;
+    return false;
+}
+
+bool ZephyrBoardRuntime::set_bluetooth_enabled(bool enabled) {
+#if defined(CONFIG_BT)
+    ensure_bluetooth_mutex_ready();
+    if (k_mutex_lock(&g_bluetooth_state_mutex, K_MSEC(250)) != 0) {
+        return false;
+    }
+
+    const bool already_enabled = g_bluetooth_stack_enabled;
+    int rc = 0;
+    if (already_enabled != enabled) {
+        rc = enabled ? bt_enable(nullptr) : bt_disable();
+        if (rc == 0) {
+            g_bluetooth_stack_enabled = enabled;
+        }
+    }
+
+    (void)k_mutex_unlock(&g_bluetooth_state_mutex);
+    return rc == 0;
+#else
+    (void)enabled;
+    return false;
+#endif
+}
+
+bool ZephyrBoardRuntime::bluetooth_enabled() const {
+#if defined(CONFIG_BT)
+    return g_bluetooth_stack_enabled;
+#else
+    return false;
+#endif
+}
+
+bool ZephyrBoardRuntime::set_gps_enabled(bool enabled) {
+    (void)enabled;
+    return false;
+}
+
+bool ZephyrBoardRuntime::gps_enabled() const {
+    return true;
+}
+
 ZephyrShellDisplayBackendProfile ZephyrBoardRuntime::shell_display_backend_profile() const {
     switch (config().display_backend_family) {
         case ZephyrBoardDisplayBackendFamily::Pager:
@@ -158,6 +231,13 @@ bool ZephyrBoardRuntime::keyboard_read_event(uint8_t& raw_event) const {
 
 bool ZephyrBoardRuntime::keyboard_read_character(uint8_t& raw_character) const {
     raw_character = 0;
+    return false;
+}
+
+bool ZephyrBoardRuntime::touch_read_point(int16_t& x, int16_t& y, bool& pressed) const {
+    x = 0;
+    y = 0;
+    pressed = false;
     return false;
 }
 

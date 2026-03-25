@@ -8,6 +8,7 @@ namespace aegis::shell {
 enum class ShellNavigationAction {
     MoveNext,
     MovePrevious,
+    PrimaryAction,
     Select,
     Back,
     OpenMenu,

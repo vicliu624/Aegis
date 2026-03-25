@@ -51,8 +51,10 @@ public:
     [[nodiscard]] bool keyboard_pending_event_count(uint8_t& pending) const;
     [[nodiscard]] bool keyboard_read_event(uint8_t& raw_event) const;
     [[nodiscard]] bool set_power_enabled(PowerChannel channel, bool enabled) const;
-    [[nodiscard]] bool set_display_backlight_enabled(bool enabled) const;
-    [[nodiscard]] bool set_keyboard_backlight_enabled(bool enabled) const;
+    [[nodiscard]] bool set_display_backlight_enabled(bool enabled) const override;
+    [[nodiscard]] bool set_keyboard_backlight_enabled(bool enabled) const override;
+    [[nodiscard]] bool set_gps_enabled(bool enabled) override;
+    [[nodiscard]] bool gps_enabled() const override;
     void signal_boot_stage(int stage) const override;
     void heartbeat_pulse() const override;
     [[nodiscard]] bool peripheral_power_enabled(PowerChannel channel) const;
@@ -96,6 +98,7 @@ private:
     mutable bool storage_state_valid_ {false};
     mutable uint8_t storage_presence_disagree_streak_ {0};
     mutable int64_t last_storage_refresh_ms_ {0};
+    bool gps_enabled_ {true};
     ZephyrTloraPagerTransferCoordinator transfer_coordinator_;
     ZephyrTloraPagerBoardControlProvider board_control_provider_;
 };

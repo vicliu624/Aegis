@@ -425,3 +425,28 @@ The shell exists to make one thing visible:
 > it is also a system with a foreground world of its own.
 
 That world is the Aegis Shell.
+
+---
+
+## 17. UI design references
+
+The shell document defines architectural role and authority boundaries.
+
+The detailed UI design for the shell is specified in:
+
+- [Aegis System UI Design](./ui-system.md)
+- [Aegis Built-in System Entries](./system-apps.md)
+- [Aegis Visual Specification](./ui-visual-spec.md)
+- [Aegis UI Icon and Image Inventory](./ui-icon-inventory.md)
+- [Aegis UI Patterns and Interaction Spec](./ui-patterns.md)
+- [Aegis Shell Wireframes and Screen Contracts](./ui-wireframes.md)
+
+These documents define:
+
+- visual direction
+- information architecture
+- navigation rules
+- page templates
+- wireframes and screen contracts
+
+They should be treated as the implementation-facing shell design reference set.

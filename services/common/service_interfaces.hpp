@@ -143,6 +143,7 @@ class ITimeService {
 public:
     virtual ~ITimeService() = default;
     [[nodiscard]] virtual bool available() const = 0;
+    [[nodiscard]] virtual std::optional<int64_t> current_unix_ms() const = 0;
     [[nodiscard]] virtual std::string describe_source() const = 0;
 };
 

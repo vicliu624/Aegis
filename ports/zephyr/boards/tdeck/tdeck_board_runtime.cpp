@@ -117,12 +117,38 @@ int ZephyrTdeckBoardRuntime::battery_voltage_mv() const {
 }
 bool ZephyrTdeckBoardRuntime::battery_charging() const { return board_control_provider_.battery_charging(); }
 bool ZephyrTdeckBoardRuntime::radio_ready() const { return ready() && transfer_coordinator_.ready(); }
-bool ZephyrTdeckBoardRuntime::gps_ready() const { return ready(); }
+bool ZephyrTdeckBoardRuntime::gps_ready() const { return ready() && gps_enabled_; }
 bool ZephyrTdeckBoardRuntime::storage_ready() const { return ready() && transfer_coordinator_.ready() && config_.removable_storage; }
 bool ZephyrTdeckBoardRuntime::audio_ready() const { return ready(); }
 bool ZephyrTdeckBoardRuntime::hostlink_ready() const { return ready(); }
+bool ZephyrTdeckBoardRuntime::set_display_backlight_enabled(bool enabled) const {
+    display_backlight_enabled_ = enabled;
+    return board_control_provider_.set_display_backlight_percent(enabled ? display_brightness_percent_ : 0);
+}
+bool ZephyrTdeckBoardRuntime::set_display_brightness_percent(uint8_t percent) const {
+    display_brightness_percent_ = percent;
+    if (!display_backlight_enabled_) {
+        return true;
+    }
+    return board_control_provider_.set_display_backlight_percent(percent);
+}
+bool ZephyrTdeckBoardRuntime::set_keyboard_backlight_enabled(bool enabled) const {
+    return board_control_provider_.set_keyboard_backlight_level(enabled ? 127 : 0);
+}
+bool ZephyrTdeckBoardRuntime::set_gps_enabled(bool enabled) {
+    if (gps_enabled_ == enabled) {
+        return true;
+    }
+    gps_enabled_ = enabled;
+    logger_.info("board", "tdeck gps enabled=" + std::string(enabled ? "1" : "0"));
+    return true;
+}
+bool ZephyrTdeckBoardRuntime::gps_enabled() const { return gps_enabled_; }
 bool ZephyrTdeckBoardRuntime::keyboard_read_character(uint8_t& raw_character) const {
     return board_control_provider_.keyboard_read_character(raw_character);
+}
+bool ZephyrTdeckBoardRuntime::touch_read_point(int16_t& x, int16_t& y, bool& pressed) const {
+    return board_control_provider_.read_touch_point(x, y, pressed);
 }
 
 int ZephyrTdeckBoardRuntime::with_coordination_domain(ZephyrBoardCoordinationDomain domain,
@@ -153,15 +179,20 @@ bool ZephyrTdeckBoardRuntime::acquire_devices() {
 #if DT_NODE_EXISTS(DT_NODELABEL(adc0))
     adc_device_ = device_get_binding(DEVICE_DT_NAME(DT_NODELABEL(adc0)));
 #endif
+#if DT_NODE_EXISTS(DT_NODELABEL(ledc0))
+    pwm_device_ = DEVICE_DT_GET(DT_NODELABEL(ledc0));
+#endif
     transfer_coordinator_.bind_gpio_device(gpio_device_);
     board_control_provider_.bind_gpio_device(gpio_device_);
     board_control_provider_.bind_i2c_device(i2c_device_);
     board_control_provider_.bind_adc_device(adc_device_);
+    board_control_provider_.bind_pwm_device(pwm_device_);
     const bool gpio_ready = gpio_device_ != nullptr && device_is_ready(gpio_device_);
     logger_.info("board",
                  "tdeck device acquisition gpio=" + std::string(gpio_ready ? "ready" : "missing") +
                      " i2c=" + std::string(i2c_device_ != nullptr && device_is_ready(i2c_device_) ? "ready" : "missing") +
-                     " adc=" + std::string(adc_device_ != nullptr && device_is_ready(adc_device_) ? "ready" : "missing"));
+                     " adc=" + std::string(adc_device_ != nullptr && device_is_ready(adc_device_) ? "ready" : "missing") +
+                     " pwm=" + std::string(pwm_device_ != nullptr && device_is_ready(pwm_device_) ? "ready" : "missing"));
     return gpio_ready;
 }
 
@@ -178,6 +209,15 @@ void ZephyrTdeckBoardRuntime::configure_trackball_pins() {
         const auto pin_ref = resolve_gpio_pin(pin);
         if (pin_ref.device != nullptr && device_is_ready(pin_ref.device)) {
             (void)gpio_pin_configure(pin_ref.device, pin_ref.pin, GPIO_INPUT | GPIO_PULL_UP);
+        }
+    }
+
+    if (config_.touch_irq_pin >= 0) {
+        const auto pin_ref = resolve_gpio_pin(config_.touch_irq_pin);
+        if (pin_ref.device != nullptr && device_is_ready(pin_ref.device)) {
+            (void)gpio_pin_configure(pin_ref.device, pin_ref.pin, GPIO_INPUT | GPIO_PULL_UP);
+            logger_.info("board",
+                         "tdeck touch irq configured pin=" + std::to_string(config_.touch_irq_pin));
         }
     }
 }

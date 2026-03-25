@@ -41,6 +41,7 @@ private:
     std::unique_ptr<IZephyrShellInputBackend> backend_;
     bool interactive_mode_enabled_ {false};
     bool callback_input_enabled_ {true};
+    uint32_t interactive_mode_started_ms_ {0};
     int keyboard_event_row_ {-1};
     int keyboard_event_col_ {-1};
 };

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <optional>
-#include <unordered_map>
 #include <string>
 
 #include "services/common/service_interfaces.hpp"
@@ -19,7 +18,6 @@ private:
     [[nodiscard]] std::string full_key(const std::string& key) const;
 
     std::string namespace_root_;
-    mutable std::unordered_map<std::string, std::string> cache_;
 };
 
 }  // namespace aegis::services

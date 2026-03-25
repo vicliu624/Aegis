@@ -211,6 +211,22 @@ bool ZephyrTloraPagerBoardRuntime::set_keyboard_backlight_enabled(bool enabled) 
     return rc == 0;
 }
 
+bool ZephyrTloraPagerBoardRuntime::set_gps_enabled(bool enabled) {
+    if (gps_enabled_ == enabled) {
+        return true;
+    }
+    gps_enabled_ = enabled;
+    const bool ok = set_power_enabled(PowerChannel::Gps, enabled);
+    logger_.info("board",
+                 "gps power enabled=" + std::string(enabled ? "1" : "0") +
+                     " rc=" + std::string(ok ? "ok" : "fail"));
+    return ok;
+}
+
+bool ZephyrTloraPagerBoardRuntime::gps_enabled() const {
+    return gps_enabled_;
+}
+
 void ZephyrTloraPagerBoardRuntime::signal_boot_stage(int stage) const {
     if (stage <= 0) {
         return;
@@ -302,7 +318,7 @@ bool ZephyrTloraPagerBoardRuntime::radio_ready() const {
 }
 
 bool ZephyrTloraPagerBoardRuntime::gps_ready() const {
-    return ready() && expander_ready() && peripheral_power_enabled(PowerChannel::Gps);
+    return gps_enabled_ && ready() && expander_ready() && peripheral_power_enabled(PowerChannel::Gps);
 }
 
 bool ZephyrTloraPagerBoardRuntime::nfc_ready() const {

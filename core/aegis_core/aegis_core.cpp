@@ -96,6 +96,7 @@ void AegisCore::boot(const std::string& package_id) {
         logger_.info("core", "assign shell text input focus");
         boot_artifacts_->service_bindings.text_input()->assign_shell_focus();
     }
+    shell_.bind_services(boot_artifacts_->service_bindings);
     logger_.info("core", "configure shell for device");
     shell_.configure_for_device(boot_artifacts_->device_profile,
                                 boot_artifacts_->shell_surface_profile);

@@ -33,7 +33,7 @@
 
 	mipi_dbi {
 		compatible = "zephyr,mipi-dbi-spi";
-		status = "disabled";
+		status = "okay";
 		spi-dev = <&spi2>;
 		dc-gpios = <&gpio1 5 GPIO_ACTIVE_HIGH>;
 		write-only;
@@ -43,7 +43,7 @@
 		st7796s: st7796s@0 {
 			compatible = "sitronix,st7796s";
 			reg = <0>;
-			status = "disabled";
+			status = "okay";
 			mipi-max-frequency = <10000000>;
 			mipi-mode = "MIPI_DBI_MODE_SPI_4WIRE";
 			width = <480>;
@@ -195,6 +195,7 @@
 	status = "okay";
 	pinctrl-0 = <&tlora_spim2_default>;
 	pinctrl-names = "default";
+	cs-gpios = <&gpio1 6 GPIO_ACTIVE_LOW>;
 };
 
 &i2s0 {

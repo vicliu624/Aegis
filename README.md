@@ -81,6 +81,16 @@ Read these in order:
 3. [Zephyr Build Guide](./docs/building-zephyr.md)
 4. [Architecture](./docs/architecture.md)
 
+If your next goal is shell and interface work, continue with:
+
+- [Aegis Shell](./docs/shell.md)
+- [Aegis System UI Design](./docs/ui-system.md)
+- [Aegis Built-in System Entries](./docs/system-apps.md)
+- [Aegis Visual Specification](./docs/ui-visual-spec.md)
+- [Aegis UI Icon and Image Inventory](./docs/ui-icon-inventory.md)
+- [Aegis UI Patterns and Interaction Spec](./docs/ui-patterns.md)
+- [Aegis Shell Wireframes and Screen Contracts](./docs/ui-wireframes.md)
+
 ### Primary build entrypoint
 
 The repository's current user-facing Zephyr entrypoint is:

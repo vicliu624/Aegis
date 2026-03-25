@@ -71,7 +71,7 @@ project(aegis_zephyr_target)
 
 option(AEGIS_ZEPHYR_ENABLE_COMPILED_APP_FALLBACK "Keep compiled-in app contracts for bootstrap." ON)
 option(AEGIS_ZEPHYR_ENABLE_APP_MODULES "Build standalone Zephyr app modules alongside the resident core." ON)
-set(AEGIS_ZEPHYR_BOOT_SELFTEST_APP_ID "demo_hello" CACHE STRING
+set(AEGIS_ZEPHYR_BOOT_SELFTEST_APP_ID "" CACHE STRING
     "Optional app id auto-launched once after boot to validate launch/return over serial logs. Empty disables the self-test.")
 
 set(AEGIS_ZEPHYR_APP_MODULE_STAGING_DIR "${CMAKE_BINARY_DIR}/aegis/apps" CACHE PATH
@@ -126,6 +126,7 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_main.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_appfs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_boot_log_logger.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/zephyr_bluetooth_support.c
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_logger.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_app_package_source.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_backend_config.cpp
@@ -134,6 +135,8 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_packages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_support.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_lvgl_assets.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/zephyr_lvgl_settings_icon_asset.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/zephyr_lvgl_status_icons_asset.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_lvgl_shell_ui.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_shell_display_backend.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_shell_input_backend.cpp
@@ -186,6 +189,7 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../../shell/control/shell_navigation_state.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../shell/launcher/launcher_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../services/ui/zephyr_ui_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../apps/builtin/settings/settings_app_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../shell/settings/settings_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../shell/status/status_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../shell/status/notification_model.cpp

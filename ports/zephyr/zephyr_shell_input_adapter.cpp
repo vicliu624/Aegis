@@ -72,6 +72,7 @@ void ZephyrShellInputAdapter::enable_interactive_mode() {
     }
 
     interactive_mode_enabled_ = true;
+    interactive_mode_started_ms_ = k_uptime_get_32();
     g_active_adapter = this;
     if (backend_ != nullptr) {
         backend_->enable_interactive_mode();
@@ -93,14 +94,35 @@ std::optional<shell::ShellNavigationAction> ZephyrShellInputAdapter::poll_action
         return std::nullopt;
     }
 
+    const auto suppress_startup_navigation =
+        [&](shell::ShellNavigationAction action) -> bool {
+        const uint32_t now_ms = k_uptime_get_32();
+        if ((now_ms - interactive_mode_started_ms_) >= 1200U) {
+            return false;
+        }
+        return action == shell::ShellNavigationAction::MovePrevious ||
+               action == shell::ShellNavigationAction::MoveNext;
+    };
+
     shell::ShellNavigationAction action {};
     if (k_msgq_get(&g_shell_action_queue, &action, K_NO_WAIT) == 0) {
+        if (suppress_startup_navigation(action)) {
+            logger_.info("input",
+                         "suppress startup action " + std::string(shell::to_string(action)));
+            return std::nullopt;
+        }
         logger_.info("input", "dispatch action " + std::string(shell::to_string(action)));
         return action;
     }
 
     if (backend_ != nullptr) {
         if (const auto backend_action = backend_->poll_action(); backend_action.has_value()) {
+            if (suppress_startup_navigation(*backend_action)) {
+                logger_.info("input",
+                             "suppress startup backend action " +
+                                 std::string(shell::to_string(*backend_action)));
+                return std::nullopt;
+            }
             logger_.info("input",
                          "dispatch backend action " + std::string(shell::to_string(*backend_action)));
             return backend_action;
