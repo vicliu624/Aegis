@@ -23,6 +23,33 @@ def run_check(label: str, command: list[str]) -> tuple[bool, str]:
         return False, details.splitlines()[0] if details else f"exit {exc.returncode}"
 
 
+def suggestions_for(label: str, detail: str) -> list[str]:
+    suggestions: list[str] = []
+    lowered = detail.lower()
+
+    if label == "python3-pip":
+        suggestions.append("install pip for the active Python 3 environment")
+        suggestions.append("Ubuntu/WSL example: sudo apt update && sudo apt install -y python3-pip")
+    elif label == "cmake":
+        suggestions.append("install CMake and ensure it is executable in this shell")
+        suggestions.append("Ubuntu/WSL example: sudo apt update && sudo apt install -y cmake")
+    elif label == "ninja":
+        suggestions.append("install Ninja and ensure it is executable in this shell")
+        suggestions.append("Ubuntu/WSL example: sudo apt update && sudo apt install -y ninja-build")
+    elif label == "west":
+        suggestions.append("install west into the active Python environment")
+        suggestions.append("example: python3 -m pip install west")
+    elif label == "esptool":
+        suggestions.append("install esptool into the active Python environment")
+        suggestions.append("example: python3 -m pip install esptool")
+
+    if "permission denied" in lowered and label in {"cmake", "ninja", "west"}:
+        suggestions.append("verify the resolved executable is not a broken Windows-path shim inside WSL")
+        suggestions.append("check with: command -v " + label)
+
+    return suggestions
+
+
 def main() -> int:
     repo_root = pathlib.Path(__file__).resolve().parents[1]
     print("[aegis-linux-check] repo=" + str(repo_root))
@@ -47,6 +74,8 @@ def main() -> int:
         print(f"[aegis-linux-check] {label}: {status} - {detail}")
         if not ok:
             failures += 1
+            for suggestion in suggestions_for(label, detail):
+                print(f"[aegis-linux-check]   fix: {suggestion}")
 
     zephyr_base = os.environ.get("ZEPHYR_BASE", "").strip()
     if zephyr_base:
@@ -55,9 +84,11 @@ def main() -> int:
         print(f"[aegis-linux-check] ZEPHYR_BASE: {status} - {zephyr_base}")
         if not exists:
             failures += 1
+            print("[aegis-linux-check]   fix: point ZEPHYR_BASE at a valid Zephyr tree")
     else:
         print("[aegis-linux-check] ZEPHYR_BASE: missing - environment variable is not set")
         failures += 1
+        print("[aegis-linux-check]   fix: export ZEPHYR_BASE=/path/to/zephyr")
 
     mklittlefs_path = shutil.which("mklittlefs")
     if mklittlefs_path:

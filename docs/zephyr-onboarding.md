@@ -372,6 +372,8 @@ This performs a fast scan for the most common missing prerequisites:
 - `ZEPHYR_BASE`
 
 It is meant to catch the most common onboarding misses before you run the full Zephyr configure step.
+When it finds a missing prerequisite, it also prints suggested repair actions, including common
+Ubuntu/WSL installation examples for items such as `python3-pip`, `cmake`, and `ninja-build`.
 
 If you want to invoke the lower-level helper directly, it still exists at:
 
