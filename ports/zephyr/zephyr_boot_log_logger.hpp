@@ -1,5 +1,7 @@
 #pragma once
 
+#include <zephyr/kernel.h>
+
 #include "platform/logging/logger.hpp"
 
 namespace aegis::ports::zephyr {
@@ -17,6 +19,7 @@ public:
 private:
     platform::Logger& delegate_;
     ZephyrShellDisplayAdapter* display_ {nullptr};
+    mutable k_mutex mutex_ {};
 };
 
 }  // namespace aegis::ports::zephyr

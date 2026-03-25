@@ -2,19 +2,22 @@
 
 #include <string>
 
+#include "ports/zephyr/zephyr_board_backend_config.hpp"
 #include "services/common/service_interfaces.hpp"
 
 namespace aegis::services {
 
 class ZephyrRadioService : public IRadioService {
 public:
-    explicit ZephyrRadioService(std::string device_name);
+    explicit ZephyrRadioService(ports::zephyr::ZephyrBoardBackendConfig config);
 
     [[nodiscard]] bool available() const override;
     [[nodiscard]] std::string backend_name() const override;
 
 private:
-    std::string device_name_;
+    [[nodiscard]] bool zephyr_device_ready() const;
+
+    ports::zephyr::ZephyrBoardBackendConfig config_;
 };
 
 }  // namespace aegis::services

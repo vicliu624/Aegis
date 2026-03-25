@@ -12,6 +12,7 @@
 #include <zephyr/sys/printk.h>
 
 #include "ports/zephyr/zephyr_gpio_pin.hpp"
+#include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
 
 namespace aegis::ports::zephyr {
 
@@ -19,6 +20,9 @@ namespace {
 
 ZephyrShellInputAdapter* g_active_adapter = nullptr;
 K_MSGQ_DEFINE(g_shell_action_queue, sizeof(shell::ShellNavigationAction), 16, 4);
+K_MSGQ_DEFINE(g_rotary_event_queue, sizeof(RotaryPhysicalEvent), 16, 1);
+K_THREAD_STACK_DEFINE(g_rotary_sampler_stack, 2048);
+struct k_thread g_rotary_sampler_thread_data;
 
 constexpr uint8_t kTca8418RegKeyLockEventCount = 0x03;
 constexpr uint8_t kTca8418RegKeyEventA = 0x04;
@@ -34,7 +38,8 @@ constexpr uint8_t kRotaryDirNone = 0x0;
 constexpr uint8_t kRotaryDirCw = 0x10;
 constexpr uint8_t kRotaryDirCcw = 0x20;
 constexpr uint32_t kRotaryActionCooldownMs = 35;
-constexpr uint32_t kRotaryCenterDebounceMs = 20;
+constexpr uint32_t kRotaryCenterDebounceMs = 30;
+constexpr uint32_t kSelectActionCooldownMs = 220;
 
 constexpr uint8_t kRotaryStateTable[7][4] = {
     {kRotaryStart, kRotaryCwBegin, kRotaryCcwBegin, kRotaryStart},
@@ -72,6 +77,8 @@ ZephyrShellInputAdapter::ZephyrShellInputAdapter(platform::Logger& logger,
 
 bool ZephyrShellInputAdapter::initialize() {
     g_active_adapter = nullptr;
+    board_direct_input_mode_ = config_.board_family == "lilygo_tlora_pager";
+    callback_input_enabled_ = !board_direct_input_mode_;
 #if DT_NODE_EXISTS(DT_NODELABEL(i2c0))
     keyboard_i2c_device_ = DEVICE_DT_GET(DT_NODELABEL(i2c0));
 #endif
@@ -84,7 +91,7 @@ bool ZephyrShellInputAdapter::initialize() {
                                ? nullptr
                                : device_get_binding(config_.keyboard_device_name.c_str());
     const bool keyboard_ready = keyboard != nullptr && device_is_ready(keyboard);
-    keyboard_driver_ready_ = keyboard_ready;
+    keyboard_driver_ready_ = board_direct_input_mode_ ? false : keyboard_ready;
     const auto rotary_a_ref = resolve_gpio_pin(config_.rotary_a_pin);
     const auto rotary_b_ref = resolve_gpio_pin(config_.rotary_b_pin);
     const auto rotary_center_ref = resolve_gpio_pin(config_.rotary_center_pin);
@@ -122,25 +129,24 @@ bool ZephyrShellInputAdapter::initialize() {
             rotary_direct_ready_ = true;
             deferred_rotary_a_ = a;
             deferred_rotary_b_ = b;
-            deferred_rotary_state_ = static_cast<uint8_t>((a << 1) | b);
+            deferred_rotary_state_ = static_cast<uint8_t>((b << 1) | a);
             deferred_rotary_state_valid_ = true;
         }
         if (rotary_center_gpio_.port != nullptr && device_is_ready(rotary_center_gpio_.port)) {
             rotary_center_last_pressed_ = gpio_pin_get_dt(&rotary_center_gpio_) == 0;
             rotary_center_debounced_state_ = rotary_center_last_pressed_;
             rotary_center_last_reading_ = rotary_center_last_pressed_;
+            rotary_center_press_latched_ = rotary_center_last_pressed_;
             deferred_center_pressed_ = rotary_center_last_pressed_;
             deferred_center_valid_ = true;
         }
     }
 
-    if (rotary_direct_ready_) {
-        k_work_init_delayable(&rotary_sampler_work_, ZephyrShellInputAdapter::rotary_sampler_work_callback);
-    }
-
     logger_.info("input",
                  "shell input adapter rotary=" + std::string(rotary_ready ? "ready" : "missing") +
                      " keyboard=" + std::string(keyboard_ready ? "ready" : "missing") +
+                     " callback=" + std::string(callback_input_enabled_ ? "enabled" : "disabled") +
+                     " direct-mode=" + std::string(board_direct_input_mode_ ? "board" : "generic") +
                      " direct-gpio=" + std::string(direct_gpio_ready ? "ready" : "missing") +
                      " direct-kbd=" + std::string(direct_keyboard_ready ? "ready" : "missing"));
     return rotary_ready || keyboard_ready || direct_gpio_ready || direct_keyboard_ready;
@@ -178,6 +184,11 @@ std::optional<shell::ShellNavigationAction> ZephyrShellInputAdapter::poll_action
         logger_.info("input", "dispatch action " + std::string(shell::to_string(action)));
         return action;
     }
+    if (const auto direct_rotary = poll_direct_rotary_action(); direct_rotary.has_value()) {
+        logger_.info("input",
+                     "dispatch direct rotary action " + std::string(shell::to_string(*direct_rotary)));
+        return direct_rotary;
+    }
     if (const auto direct_keyboard = poll_direct_keyboard_action(); direct_keyboard.has_value()) {
         logger_.info("input",
                      "dispatch direct keyboard action " + std::string(shell::to_string(*direct_keyboard)));
@@ -194,14 +205,20 @@ void ZephyrShellInputAdapter::record_mapped_action(const input_event& event,
                      " action=" + std::string(shell::to_string(action)));
 }
 
-void ZephyrShellInputAdapter::rotary_sampler_work_callback(k_work* work) {
-    ARG_UNUSED(work);
-    if (g_active_adapter == nullptr || !g_active_adapter->interactive_mode_enabled_) {
+void ZephyrShellInputAdapter::rotary_sampler_thread_entry(void* p1, void* p2, void* p3) {
+    ARG_UNUSED(p2);
+    ARG_UNUSED(p3);
+    auto* adapter = static_cast<ZephyrShellInputAdapter*>(p1);
+    if (adapter == nullptr) {
         return;
     }
 
-    g_active_adapter->sample_rotary_inputs();
-    (void)k_work_schedule(&g_active_adapter->rotary_sampler_work_, K_MSEC(2));
+    while (!adapter->rotary_sampler_stop_requested_) {
+        if (g_active_adapter == adapter && adapter->interactive_mode_enabled_) {
+            adapter->sample_rotary_inputs();
+        }
+        k_sleep(K_MSEC(2));
+    }
 }
 
 void ZephyrShellInputAdapter::start_rotary_sampler() {
@@ -210,7 +227,18 @@ void ZephyrShellInputAdapter::start_rotary_sampler() {
     }
 
     rotary_sampler_started_ = true;
-    (void)k_work_schedule(&rotary_sampler_work_, K_NO_WAIT);
+    rotary_sampler_stop_requested_ = false;
+    rotary_sampler_thread_ = k_thread_create(&g_rotary_sampler_thread_data,
+                                             g_rotary_sampler_stack,
+                                             K_THREAD_STACK_SIZEOF(g_rotary_sampler_stack),
+                                             ZephyrShellInputAdapter::rotary_sampler_thread_entry,
+                                             this,
+                                             nullptr,
+                                             nullptr,
+                                             8,
+                                             0,
+                                             K_NO_WAIT);
+    k_thread_name_set(rotary_sampler_thread_, "aegis_rotary");
     logger_.info("input", "direct rotary sampler started");
 }
 
@@ -221,10 +249,12 @@ void ZephyrShellInputAdapter::sample_rotary_inputs() {
 
     const auto a = gpio_pin_get_dt(&rotary_a_gpio_) > 0 ? 1U : 0U;
     const auto b = gpio_pin_get_dt(&rotary_b_gpio_) > 0 ? 1U : 0U;
-    const auto state = static_cast<uint8_t>((a << 1) | b);
+    const auto state = static_cast<uint8_t>((b << 1) | a);
     const bool center_pressed = rotary_center_gpio_.port != nullptr && device_is_ready(rotary_center_gpio_.port)
                                     ? (gpio_pin_get_dt(&rotary_center_gpio_) == 0)
                                     : false;
+    bool state_changed = false;
+    bool center_changed = false;
 
     if (!deferred_rotary_state_valid_ || deferred_rotary_state_ != state || deferred_rotary_a_ != a ||
         deferred_rotary_b_ != b) {
@@ -233,15 +263,21 @@ void ZephyrShellInputAdapter::sample_rotary_inputs() {
         deferred_rotary_state_ = state;
         deferred_rotary_state_valid_ = true;
         deferred_rotary_state_dirty_ = true;
+        state_changed = true;
     }
     if (!deferred_center_valid_ || deferred_center_pressed_ != center_pressed) {
         deferred_center_pressed_ = center_pressed;
         deferred_center_valid_ = true;
         deferred_center_dirty_ = true;
+        center_changed = true;
     }
 
-    if (const auto direct_rotary = poll_direct_rotary_action(); direct_rotary.has_value()) {
-        enqueue_action(*direct_rotary);
+    const uint32_t now_ms = k_uptime_get_32();
+    if (state_changed) {
+        process_direct_rotary_transition(now_ms);
+    }
+    if (center_changed || deferred_center_valid_) {
+        process_direct_rotary_center(now_ms);
     }
 }
 
@@ -252,8 +288,75 @@ void ZephyrShellInputAdapter::enqueue_action(shell::ShellNavigationAction action
     }
 }
 
+void ZephyrShellInputAdapter::enqueue_rotary_event(RotaryPhysicalEvent event) {
+    auto copy = event;
+    if (k_msgq_put(&g_rotary_event_queue, &copy, K_NO_WAIT) != 0) {
+        deferred_step_dirty_ = false;
+        printk("AEGIS TRACE: rotary physical event queue full\n");
+    }
+}
+
+void ZephyrShellInputAdapter::process_direct_rotary_transition(uint32_t now_ms) {
+    if (!rotary_direct_ready_ || !deferred_rotary_state_valid_) {
+        return;
+    }
+
+    const uint8_t pin_state = deferred_rotary_state_;
+    rotary_fsm_state_ = kRotaryStateTable[rotary_fsm_state_ & 0x0F][pin_state];
+    const uint8_t emit = static_cast<uint8_t>(rotary_fsm_state_ & 0x30);
+
+    if (emit == kRotaryDirCw && (now_ms - last_rotary_action_ms_) >= kRotaryActionCooldownMs) {
+        last_rotary_action_ms_ = now_ms;
+        deferred_step_action_ = shell::ShellNavigationAction::MoveNext;
+        deferred_step_dirty_ = true;
+        enqueue_rotary_event(RotaryPhysicalEvent::StepNext);
+    } else if (emit == kRotaryDirCcw && (now_ms - last_rotary_action_ms_) >= kRotaryActionCooldownMs) {
+        last_rotary_action_ms_ = now_ms;
+        deferred_step_action_ = shell::ShellNavigationAction::MovePrevious;
+        deferred_step_dirty_ = true;
+        enqueue_rotary_event(RotaryPhysicalEvent::StepPrevious);
+    }
+}
+
+void ZephyrShellInputAdapter::process_direct_rotary_center(uint32_t now_ms) {
+    if (!rotary_direct_ready_ || config_.rotary_center_pin < 0) {
+        return;
+    }
+
+    const bool reading = deferred_center_valid_ ? deferred_center_pressed_ : false;
+    if (reading != rotary_center_last_reading_) {
+        rotary_center_last_debounce_ms_ = now_ms;
+        rotary_center_last_reading_ = reading;
+    }
+    if ((now_ms - rotary_center_last_debounce_ms_) < kRotaryCenterDebounceMs ||
+        reading == rotary_center_debounced_state_) {
+        return;
+    }
+
+    rotary_center_debounced_state_ = reading;
+    if (rotary_center_debounced_state_) {
+        rotary_center_last_pressed_ = true;
+        if (rotary_center_press_latched_) {
+            return;
+        }
+        rotary_center_press_latched_ = true;
+        if ((now_ms - last_select_action_ms_) >= kSelectActionCooldownMs) {
+            last_select_action_ms_ = now_ms;
+            enqueue_rotary_event(RotaryPhysicalEvent::CenterPressed);
+        }
+        return;
+    }
+
+    rotary_center_last_pressed_ = false;
+    rotary_center_press_latched_ = false;
+}
+
 std::optional<shell::ShellNavigationAction> ZephyrShellInputAdapter::map_input_event(
     const input_event& event) {
+    if (!callback_input_enabled_) {
+        return std::nullopt;
+    }
+
     if (event.type == INPUT_EV_ABS) {
         if (event.code == INPUT_ABS_X) {
             keyboard_event_col_ = event.value;
@@ -338,53 +441,15 @@ std::optional<shell::ShellNavigationAction> ZephyrShellInputAdapter::map_matrix_
 }
 
 std::optional<shell::ShellNavigationAction> ZephyrShellInputAdapter::poll_direct_rotary_action() {
-    if (!rotary_direct_ready_ || config_.rotary_a_pin < 0 || config_.rotary_b_pin < 0) {
-        return std::nullopt;
-    }
-
-    if (rotary_a_gpio_.port == nullptr || !device_is_ready(rotary_a_gpio_.port) ||
-        rotary_b_gpio_.port == nullptr || !device_is_ready(rotary_b_gpio_.port)) {
-        return std::nullopt;
-    }
-
-    const uint32_t now_ms = k_uptime_get_32();
-    const auto a = gpio_pin_get_dt(&rotary_a_gpio_) > 0 ? 1U : 0U;
-    const auto b = gpio_pin_get_dt(&rotary_b_gpio_) > 0 ? 1U : 0U;
-    const uint8_t pin_state = static_cast<uint8_t>((b << 1) | a);
-    rotary_fsm_state_ = kRotaryStateTable[rotary_fsm_state_ & 0x0F][pin_state];
-    const uint8_t emit = static_cast<uint8_t>(rotary_fsm_state_ & 0x30);
-
-    if (emit == kRotaryDirCw && (now_ms - last_rotary_action_ms_) >= kRotaryActionCooldownMs) {
-        last_rotary_action_ms_ = now_ms;
-        deferred_step_action_ = shell::ShellNavigationAction::MoveNext;
-        deferred_step_dirty_ = true;
-        return shell::ShellNavigationAction::MoveNext;
-    }
-    if (emit == kRotaryDirCcw && (now_ms - last_rotary_action_ms_) >= kRotaryActionCooldownMs) {
-        last_rotary_action_ms_ = now_ms;
-        deferred_step_action_ = shell::ShellNavigationAction::MovePrevious;
-        deferred_step_dirty_ = true;
-        return shell::ShellNavigationAction::MovePrevious;
-    }
-
-    if (config_.rotary_center_pin >= 0) {
-        const bool reading = rotary_center_gpio_.port != nullptr && device_is_ready(rotary_center_gpio_.port)
-                                 ? (gpio_pin_get_dt(&rotary_center_gpio_) == 0)
-                                 : false;
-        if (reading != rotary_center_last_reading_) {
-            rotary_center_last_debounce_ms_ = now_ms;
-            rotary_center_last_reading_ = reading;
-        }
-        if ((now_ms - rotary_center_last_debounce_ms_) >= kRotaryCenterDebounceMs &&
-            reading != rotary_center_debounced_state_) {
-            rotary_center_debounced_state_ = reading;
-            if (rotary_center_debounced_state_ && !rotary_center_last_pressed_) {
-                rotary_center_last_pressed_ = true;
+    RotaryPhysicalEvent event {};
+    if (k_msgq_get(&g_rotary_event_queue, &event, K_NO_WAIT) == 0) {
+        switch (event) {
+            case RotaryPhysicalEvent::StepNext:
+                return shell::ShellNavigationAction::MoveNext;
+            case RotaryPhysicalEvent::StepPrevious:
+                return shell::ShellNavigationAction::MovePrevious;
+            case RotaryPhysicalEvent::CenterPressed:
                 return shell::ShellNavigationAction::Select;
-            }
-            if (!rotary_center_debounced_state_) {
-                rotary_center_last_pressed_ = false;
-            }
         }
     }
 
@@ -401,10 +466,21 @@ std::optional<shell::ShellNavigationAction> ZephyrShellInputAdapter::poll_direct
     }
 
     uint8_t pending = 0;
-    if (i2c_reg_read_byte(keyboard_i2c_device_,
-                          static_cast<uint16_t>(config_.keyboard_i2c_address),
-                          kTca8418RegKeyLockEventCount,
-                          &pending) != 0) {
+    bool pending_ok = false;
+    auto& pager_runtime = tlora_pager_board_runtime(logger_);
+    const bool pager_runtime_ready = pager_runtime.ready();
+    if (pager_runtime_ready) {
+        if (!pager_runtime.keyboard_irq_asserted()) {
+            return std::nullopt;
+        }
+        pending_ok = pager_runtime.keyboard_pending_event_count(pending);
+    } else {
+        pending_ok = i2c_reg_read_byte(keyboard_i2c_device_,
+                                       static_cast<uint16_t>(config_.keyboard_i2c_address),
+                                       kTca8418RegKeyLockEventCount,
+                                       &pending) == 0;
+    }
+    if (!pending_ok) {
         return std::nullopt;
     }
 
@@ -413,20 +489,39 @@ std::optional<shell::ShellNavigationAction> ZephyrShellInputAdapter::poll_direct
         return std::nullopt;
     }
 
-    uint8_t raw_event = 0;
-    if (i2c_reg_read_byte(keyboard_i2c_device_,
-                          static_cast<uint16_t>(config_.keyboard_i2c_address),
-                          kTca8418RegKeyEventA,
-                          &raw_event) != 0) {
-        return std::nullopt;
-    }
+    std::optional<shell::ShellNavigationAction> first_action;
+    for (uint8_t index = 0; index < pending; ++index) {
+        uint8_t raw_event = 0;
+        bool event_ok = false;
+        if (pager_runtime_ready) {
+            event_ok = pager_runtime.keyboard_read_event(raw_event);
+        } else {
+            event_ok = i2c_reg_read_byte(keyboard_i2c_device_,
+                                         static_cast<uint16_t>(config_.keyboard_i2c_address),
+                                         kTca8418RegKeyEventA,
+                                         &raw_event) == 0;
+        }
+        if (!event_ok) {
+            break;
+        }
 
-    const bool pressed = (raw_event & kTca8418ReleaseFlag) == 0U;
-    const auto code = static_cast<uint8_t>(raw_event & 0x7FU);
-    logger_.info("input",
-                 "direct keyboard raw=" + std::to_string(code) +
-                     " pressed=" + std::string(pressed ? "1" : "0"));
-    return map_direct_key(code, pressed);
+        const bool pressed = (raw_event & kTca8418ReleaseFlag) == 0U;
+        const auto code = static_cast<uint8_t>(raw_event & 0x7FU);
+        logger_.info("input",
+                     "direct keyboard raw=" + std::to_string(code) +
+                         " pressed=" + std::string(pressed ? "1" : "0") +
+                         " pending-index=" + std::to_string(index));
+        const auto mapped = map_direct_key(code, pressed);
+        if (!mapped.has_value()) {
+            continue;
+        }
+        if (!first_action.has_value()) {
+            first_action = mapped;
+        } else {
+            enqueue_action(*mapped);
+        }
+    }
+    return first_action;
 }
 
 void ZephyrShellInputAdapter::flush_deferred_input_debug() {

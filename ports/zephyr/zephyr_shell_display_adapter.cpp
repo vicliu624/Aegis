@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cctype>
 #include <cstring>
 
@@ -16,6 +17,7 @@
 #include <zephyr/sys/printk.h>
 
 #include "ports/zephyr/zephyr_gpio_pin.hpp"
+#include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
 
 namespace aegis::ports::zephyr {
 
@@ -209,7 +211,9 @@ mipi_dbi_config make_raw_mipi_config() {
 
 ZephyrShellDisplayAdapter::ZephyrShellDisplayAdapter(platform::Logger& logger,
                                                      ZephyrBoardBackendConfig config)
-    : logger_(logger), config_(std::move(config)) {}
+    : logger_(logger), config_(std::move(config)) {
+    k_mutex_init(&boot_log_mutex_);
+}
 
 bool ZephyrShellDisplayAdapter::initialize() {
     if (config_.display_prefer_manual_spi && initialize_manual_spi_st7796_backend()) {
@@ -492,16 +496,44 @@ void ZephyrShellDisplayAdapter::present(const shell::ShellPresentationFrame& fra
         return;
     }
 
+    const uint32_t start_ms = k_uptime_get_32();
     const auto signature = frame_signature(frame);
     if (signature == last_frame_signature_) {
         return;
     }
 
-    prepare_surface_background(frame);
-    present_text_overlay(frame);
+    const int width = std::max(0, config_.display_width);
+    const int height = std::max(0, config_.display_height);
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+
+    int redraw_top = 0;
+    int redraw_bottom = height;
+    if (last_frame_available_ && last_frame_.surface == frame.surface) {
+        const bool header_changed = last_frame_.headline != frame.headline ||
+                                    last_frame_.detail != frame.detail ||
+                                    last_frame_.context != frame.context;
+        if (header_changed) {
+            redraw_top = 34;
+            redraw_bottom = std::min(height, 110);
+        } else {
+            redraw_top = first_body_line_y(frame, last_frame_);
+            redraw_bottom = last_body_line_bottom(frame, last_frame_);
+        }
+    }
+
+    if (redraw_bottom > redraw_top) {
+        present_frame_range(frame, redraw_top, redraw_bottom);
+    }
     last_surface_valid_ = true;
     last_surface_ = frame.surface;
     last_frame_signature_ = signature;
+    last_frame_available_ = true;
+    last_frame_ = frame;
+    logger_.info("display",
+                 "present complete surface=" + std::string(surface_name(frame.surface)) +
+                     " elapsed-ms=" + std::to_string(k_uptime_get_32() - start_ms));
     log_frame(frame);
 }
 
@@ -510,6 +542,9 @@ void ZephyrShellDisplayAdapter::record_boot_log(std::string_view category, std::
         return;
     }
 
+    if (k_mutex_lock(&boot_log_mutex_, K_MSEC(50)) != 0) {
+        return;
+    }
     std::string line = "[";
     line += std::string(category);
     line += "] ";
@@ -518,6 +553,7 @@ void ZephyrShellDisplayAdapter::record_boot_log(std::string_view category, std::
     while (boot_log_lines_.size() > 18) {
         boot_log_lines_.pop_front();
     }
+    (void)k_mutex_unlock(&boot_log_mutex_);
 }
 
 void ZephyrShellDisplayAdapter::present_boot_log_screen(std::string_view stage) const {
@@ -534,12 +570,15 @@ void ZephyrShellDisplayAdapter::present_boot_log_screen(std::string_view stage) 
     fill_rect(0, 46, config_.display_width, 34, 0xFFE0);
     draw_text_block_scaled(10, 54, std::string(stage), 0x0000, 0xFFE0, 2);
     int y = 88;
-    for (const auto& line : boot_log_lines_) {
-        if (y + (kGlyphHeight * 2) >= config_.display_height - 16) {
-            break;
+    if (k_mutex_lock(&boot_log_mutex_, K_MSEC(50)) == 0) {
+        for (const auto& line : boot_log_lines_) {
+            if (y + (kGlyphHeight * 2) >= config_.display_height - 16) {
+                break;
+            }
+            draw_text_block_scaled(8, y, line, 0x0000, 0xFFFF, 2);
+            y += (kLineAdvance * 2);
         }
-        draw_text_block_scaled(8, y, line, 0x0000, 0xFFFF, 2);
-        y += (kLineAdvance * 2);
+        (void)k_mutex_unlock(&boot_log_mutex_);
     }
     suppress_boot_log_capture_ = false;
 }
@@ -691,20 +730,97 @@ std::string ZephyrShellDisplayAdapter::frame_signature(
     return signature;
 }
 
+void ZephyrShellDisplayAdapter::present_frame_range(const shell::ShellPresentationFrame& frame,
+                                                    int y0,
+                                                    int y1) const {
+    constexpr int kBandRows = 48;
+    const int height = std::max(0, config_.display_height);
+    const int top = std::clamp(y0, 0, height);
+    const int bottom = std::clamp(y1, top, height);
+    for (int band_origin_y = top; band_origin_y < bottom; band_origin_y += kBandRows) {
+        const int band_height = std::min(kBandRows, bottom - band_origin_y);
+        render_frame_to_scratch(frame, band_origin_y, band_height);
+        blit_scratch();
+    }
+}
+
+int ZephyrShellDisplayAdapter::first_body_line_y(const shell::ShellPresentationFrame& frame,
+                                                 const shell::ShellPresentationFrame& previous) const {
+    const std::size_t min_lines = std::min(frame.lines.size(), previous.lines.size());
+    int body_y = 114;
+    for (std::size_t index = 0; index < min_lines; ++index) {
+        const auto& current = frame.lines[index];
+        const auto& prior = previous.lines[index];
+        if (current.text != prior.text || current.emphasized != prior.emphasized) {
+            return std::max(34, body_y - 4);
+        }
+        body_y += current.emphasized ? 28 : 20;
+    }
+    if (frame.lines.size() != previous.lines.size()) {
+        return std::max(34, body_y - 4);
+    }
+    return std::max(0, config_.display_height - 20);
+}
+
+int ZephyrShellDisplayAdapter::last_body_line_bottom(const shell::ShellPresentationFrame& frame,
+                                                     const shell::ShellPresentationFrame& previous) const {
+    const auto line_extent = [](const shell::ShellPresentationFrame& target,
+                                std::size_t count) -> int {
+        int body_y = 114;
+        for (std::size_t index = 0; index < count && index < target.lines.size(); ++index) {
+            body_y += target.lines[index].emphasized ? 28 : 20;
+        }
+        return body_y;
+    };
+
+    const std::size_t max_lines = std::max(frame.lines.size(), previous.lines.size());
+    std::size_t last_changed = static_cast<std::size_t>(-1);
+    for (std::size_t index = 0; index < max_lines; ++index) {
+        const bool current_exists = index < frame.lines.size();
+        const bool previous_exists = index < previous.lines.size();
+        if (current_exists != previous_exists) {
+            last_changed = index;
+            continue;
+        }
+        if (!current_exists) {
+            continue;
+        }
+        if (frame.lines[index].text != previous.lines[index].text ||
+            frame.lines[index].emphasized != previous.lines[index].emphasized) {
+            last_changed = index;
+        }
+    }
+
+    if (last_changed == static_cast<std::size_t>(-1)) {
+        return std::max(0, config_.display_height - 20);
+    }
+
+    const int current_bottom = line_extent(frame, last_changed + 1);
+    const int previous_bottom = line_extent(previous, last_changed + 1);
+    const int dirty_bottom = std::max(current_bottom, previous_bottom) + 4;
+    return std::clamp(dirty_bottom, 34, std::max(0, config_.display_height - 20));
+}
+
 void ZephyrShellDisplayAdapter::ensure_scratch_capacity(std::size_t pixels) const {
     scratch_pixels_.resize(pixels);
 }
 
 void ZephyrShellDisplayAdapter::render_frame_to_scratch(
-    const shell::ShellPresentationFrame& frame) const {
+    const shell::ShellPresentationFrame& frame,
+    int band_origin_y,
+    int band_height) const {
     const int width = std::max(0, config_.display_width);
     const int height = std::max(0, config_.display_height);
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0 || band_height <= 0) {
         return;
     }
 
-    ensure_scratch_capacity(static_cast<std::size_t>(width) * height);
-    std::fill_n(scratch_pixels_.begin(), static_cast<std::size_t>(width) * height, color_for(frame.surface));
+    scratch_band_origin_y_ = std::clamp(band_origin_y, 0, height);
+    scratch_band_height_ = std::clamp(band_height, 0, height - scratch_band_origin_y_);
+    ensure_scratch_capacity(static_cast<std::size_t>(width) * scratch_band_height_);
+    std::fill_n(scratch_pixels_.begin(),
+                static_cast<std::size_t>(width) * scratch_band_height_,
+                color_for(frame.surface));
 
     const uint16_t surface_bg = color_for(frame.surface);
     const uint16_t header_bg = 0x0000;
@@ -762,16 +878,20 @@ void ZephyrShellDisplayAdapter::scratch_fill_rect(int x,
                                                   uint16_t rgb565) const {
     const int display_width = std::max(0, config_.display_width);
     const int display_height = std::max(0, config_.display_height);
-    if (display_width <= 0 || display_height <= 0 || width <= 0 || height <= 0) {
+    if (display_width <= 0 || display_height <= 0 || width <= 0 || height <= 0 ||
+        scratch_band_height_ <= 0) {
         return;
     }
 
     const int x0 = std::clamp(x, 0, display_width);
-    const int y0 = std::clamp(y, 0, display_height);
+    const int y0 = std::clamp(y, scratch_band_origin_y_, scratch_band_origin_y_ + scratch_band_height_);
     const int x1 = std::clamp(x + width, 0, display_width);
-    const int y1 = std::clamp(y + height, 0, display_height);
+    const int y1 = std::clamp(y + height,
+                              scratch_band_origin_y_,
+                              scratch_band_origin_y_ + scratch_band_height_);
     for (int py = y0; py < y1; ++py) {
-        auto* row = scratch_pixels_.data() + (static_cast<std::size_t>(py) * display_width);
+        auto* row = scratch_pixels_.data() +
+                    (static_cast<std::size_t>(py - scratch_band_origin_y_) * display_width);
         std::fill(row + x0, row + x1, rgb565);
     }
 }
@@ -835,21 +955,22 @@ void ZephyrShellDisplayAdapter::scratch_draw_glyph_scaled(int x,
 void ZephyrShellDisplayAdapter::scratch_write_pixel(int x, int y, uint16_t rgb565) const {
     const int width = std::max(0, config_.display_width);
     const int height = std::max(0, config_.display_height);
-    if (x < 0 || y < 0 || x >= width || y >= height) {
+    if (x < 0 || y < scratch_band_origin_y_ || x >= width ||
+        y >= scratch_band_origin_y_ + scratch_band_height_ || y >= height) {
         return;
     }
 
-    scratch_pixels_[static_cast<std::size_t>(y) * width + static_cast<std::size_t>(x)] = rgb565;
+    scratch_pixels_[static_cast<std::size_t>(y - scratch_band_origin_y_) * width +
+                    static_cast<std::size_t>(x)] = rgb565;
 }
 
 void ZephyrShellDisplayAdapter::blit_scratch() const {
     const int width = std::max(0, config_.display_width);
-    const int height = std::max(0, config_.display_height);
-    if (width <= 0 || height <= 0) {
+    if (width <= 0 || scratch_band_height_ <= 0) {
         return;
     }
 
-    write_region(0, 0, width, height, scratch_pixels_);
+    write_region(0, scratch_band_origin_y_, width, scratch_band_height_, scratch_pixels_);
 }
 
 void ZephyrShellDisplayAdapter::present_text_overlay(const shell::ShellPresentationFrame& frame) const {
@@ -1025,6 +1146,20 @@ int ZephyrShellDisplayAdapter::manual_send_command(uint8_t cmd) const {
 int ZephyrShellDisplayAdapter::manual_send_command(uint8_t cmd,
                                                    const uint8_t* data,
                                                    std::size_t len) const {
+    auto& pager_runtime = tlora_pager_board_runtime(logger_);
+    if (pager_runtime.ready()) {
+        return pager_runtime.with_shared_spi_client(
+            ZephyrTloraPagerBoardRuntime::SharedSpiClient::Display,
+            K_MSEC(50),
+            "display.manual_send_command",
+            [&]() { return manual_send_command_unlocked(cmd, data, len); });
+    }
+    return manual_send_command_unlocked(cmd, data, len);
+}
+
+int ZephyrShellDisplayAdapter::manual_send_command_unlocked(uint8_t cmd,
+                                                            const uint8_t* data,
+                                                            std::size_t len) const {
     if (!manual_backend_ready()) {
         return -19;
     }
@@ -1059,6 +1194,18 @@ int ZephyrShellDisplayAdapter::manual_send_command(uint8_t cmd,
 }
 
 int ZephyrShellDisplayAdapter::manual_send_data(const uint8_t* data, std::size_t len) const {
+    auto& pager_runtime = tlora_pager_board_runtime(logger_);
+    if (pager_runtime.ready()) {
+        return pager_runtime.with_shared_spi_client(
+            ZephyrTloraPagerBoardRuntime::SharedSpiClient::Display,
+            K_MSEC(50),
+            "display.manual_send_data",
+            [&]() { return manual_send_data_unlocked(data, len); });
+    }
+    return manual_send_data_unlocked(data, len);
+}
+
+int ZephyrShellDisplayAdapter::manual_send_data_unlocked(const uint8_t* data, std::size_t len) const {
     if (!manual_backend_ready()) {
         return -19;
     }
@@ -1084,6 +1231,20 @@ int ZephyrShellDisplayAdapter::manual_send_data(const uint8_t* data, std::size_t
 }
 
 int ZephyrShellDisplayAdapter::manual_read_command(uint8_t cmd, uint8_t* data, std::size_t len) const {
+    auto& pager_runtime = tlora_pager_board_runtime(logger_);
+    if (pager_runtime.ready()) {
+        return pager_runtime.with_shared_spi_client(
+            ZephyrTloraPagerBoardRuntime::SharedSpiClient::Display,
+            K_MSEC(50),
+            "display.manual_read_command",
+            [&]() { return manual_read_command_unlocked(cmd, data, len); });
+    }
+    return manual_read_command_unlocked(cmd, data, len);
+}
+
+int ZephyrShellDisplayAdapter::manual_read_command_unlocked(uint8_t cmd,
+                                                            uint8_t* data,
+                                                            std::size_t len) const {
     if (!manual_backend_ready()) {
         return -19;
     }
@@ -1204,6 +1365,23 @@ int ZephyrShellDisplayAdapter::manual_write_pixels(int x,
                                                    int width,
                                                    int height,
                                                    const std::vector<uint16_t>& pixels) const {
+    auto& pager_runtime = tlora_pager_board_runtime(logger_);
+    if (pager_runtime.ready()) {
+        return pager_runtime.with_shared_spi_client(
+            ZephyrTloraPagerBoardRuntime::SharedSpiClient::Display,
+            K_MSEC(50),
+            "display.manual_write_pixels",
+            [&]() { return manual_write_pixels_unlocked(x, y, width, height, pixels); });
+    }
+    return manual_write_pixels_unlocked(x, y, width, height, pixels);
+}
+
+int ZephyrShellDisplayAdapter::manual_write_pixels_unlocked(
+    int x,
+    int y,
+    int width,
+    int height,
+    const std::vector<uint16_t>& pixels) const {
     if (!manual_backend_ready()) {
         return -19;
     }
@@ -1293,18 +1471,18 @@ int ZephyrShellDisplayAdapter::raw_set_cursor(uint16_t x,
     uint16_t address_data[2];
     address_data[0] = sys_cpu_to_be16(x0);
     address_data[1] = sys_cpu_to_be16(static_cast<uint16_t>(x0 + width - 1));
-    int rc = raw_send_command(kSt7796sCmdColumnAddressSet,
-                              reinterpret_cast<const uint8_t*>(address_data),
-                              sizeof(address_data));
+    int rc = raw_send_command_unlocked(kSt7796sCmdColumnAddressSet,
+                                       reinterpret_cast<const uint8_t*>(address_data),
+                                       sizeof(address_data));
     if (rc != 0) {
         return rc;
     }
 
     address_data[0] = sys_cpu_to_be16(y0);
     address_data[1] = sys_cpu_to_be16(static_cast<uint16_t>(y0 + height - 1));
-    return raw_send_command(kSt7796sCmdRowAddressSet,
-                            reinterpret_cast<const uint8_t*>(address_data),
-                            sizeof(address_data));
+    return raw_send_command_unlocked(kSt7796sCmdRowAddressSet,
+                                     reinterpret_cast<const uint8_t*>(address_data),
+                                     sizeof(address_data));
 }
 
 int ZephyrShellDisplayAdapter::raw_write_pixels(int x,
@@ -1312,6 +1490,22 @@ int ZephyrShellDisplayAdapter::raw_write_pixels(int x,
                                                 int width,
                                                 int height,
                                                 const std::vector<uint16_t>& pixels) const {
+    auto& pager_runtime = tlora_pager_board_runtime(logger_);
+    if (pager_runtime.ready()) {
+        return pager_runtime.with_shared_spi_client(
+            ZephyrTloraPagerBoardRuntime::SharedSpiClient::Display,
+            K_MSEC(50),
+            "display.raw_write_pixels",
+            [&]() { return raw_write_pixels_unlocked(x, y, width, height, pixels); });
+    }
+    return raw_write_pixels_unlocked(x, y, width, height, pixels);
+}
+
+int ZephyrShellDisplayAdapter::raw_write_pixels_unlocked(int x,
+                                                         int y,
+                                                         int width,
+                                                         int height,
+                                                         const std::vector<uint16_t>& pixels) const {
     if (!raw_backend_ready()) {
         return -19;
     }
@@ -1323,7 +1517,7 @@ int ZephyrShellDisplayAdapter::raw_write_pixels(int x,
         return rc;
     }
 
-    const int memory_write_rc = raw_send_command(kSt7796sCmdMemoryWrite, nullptr, 0);
+    const int memory_write_rc = raw_send_command_unlocked(kSt7796sCmdMemoryWrite, nullptr, 0);
     if (memory_write_rc != 0) {
         return memory_write_rc;
     }
@@ -1345,6 +1539,20 @@ int ZephyrShellDisplayAdapter::raw_write_pixels(int x,
 int ZephyrShellDisplayAdapter::raw_send_command(uint8_t cmd,
                                                 const uint8_t* data,
                                                 std::size_t len) const {
+    auto& pager_runtime = tlora_pager_board_runtime(logger_);
+    if (pager_runtime.ready()) {
+        return pager_runtime.with_shared_spi_client(
+            ZephyrTloraPagerBoardRuntime::SharedSpiClient::Display,
+            K_MSEC(50),
+            "display.raw_send_command",
+            [&]() { return raw_send_command_unlocked(cmd, data, len); });
+    }
+    return raw_send_command_unlocked(cmd, data, len);
+}
+
+int ZephyrShellDisplayAdapter::raw_send_command_unlocked(uint8_t cmd,
+                                                         const uint8_t* data,
+                                                         std::size_t len) const {
     if (!raw_backend_ready()) {
         return -19;
     }

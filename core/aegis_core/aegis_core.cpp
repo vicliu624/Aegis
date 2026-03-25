@@ -186,8 +186,11 @@ void AegisCore::run_shell_action_sequence(const std::vector<shell::ShellNavigati
         throw std::runtime_error("core must boot before shell actions");
     }
     for (const auto action : actions) {
+        logger_.info("core", "shell action begin " + std::string(shell::to_string(action)));
         const auto launch_request = shell_.handle_action(action);
+        logger_.info("core", "shell action end " + std::string(shell::to_string(action)));
         if (launch_request) {
+            logger_.info("core", "shell action launch request " + *launch_request);
             run_app(*launch_request);
         }
     }

@@ -2,13 +2,14 @@
 
 #include <string>
 
+#include "ports/zephyr/zephyr_board_backend_config.hpp"
 #include "services/common/service_interfaces.hpp"
 
 namespace aegis::services {
 
 class ZephyrHostlinkService : public IHostlinkService {
 public:
-    ZephyrHostlinkService(std::string transport_device_name, std::string bridge_name);
+    explicit ZephyrHostlinkService(ports::zephyr::ZephyrBoardBackendConfig config);
 
     [[nodiscard]] bool available() const override;
     [[nodiscard]] bool connected() const override;
@@ -16,8 +17,9 @@ public:
     [[nodiscard]] std::string bridge_name() const override;
 
 private:
-    std::string transport_device_name_;
-    std::string bridge_name_;
+    [[nodiscard]] bool zephyr_device_ready() const;
+
+    ports::zephyr::ZephyrBoardBackendConfig config_;
 };
 
 }  // namespace aegis::services

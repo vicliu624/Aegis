@@ -5,10 +5,12 @@
 #include <string_view>
 #include <string>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <zephyr/device.h>
 #include <zephyr/drivers/spi.h>
+#include <zephyr/kernel.h>
 
 #include "platform/logging/logger.hpp"
 #include "ports/zephyr/zephyr_board_backend_config.hpp"
@@ -62,7 +64,15 @@ private:
                                        int width,
                                        int height,
                                        const std::vector<uint16_t>& pixels) const;
+    [[nodiscard]] int raw_write_pixels_unlocked(int x,
+                                                int y,
+                                                int width,
+                                                int height,
+                                                const std::vector<uint16_t>& pixels) const;
     [[nodiscard]] int raw_send_command(uint8_t cmd, const uint8_t* data, std::size_t len) const;
+    [[nodiscard]] int raw_send_command_unlocked(uint8_t cmd,
+                                                const uint8_t* data,
+                                                std::size_t len) const;
     [[nodiscard]] bool manual_backend_ready() const;
     [[nodiscard]] int manual_set_cursor(uint16_t x, uint16_t y, uint16_t width, uint16_t height) const;
     [[nodiscard]] int manual_write_pixels(int x,
@@ -70,15 +80,36 @@ private:
                                           int width,
                                           int height,
                                           const std::vector<uint16_t>& pixels) const;
+    [[nodiscard]] int manual_write_pixels_unlocked(int x,
+                                                   int y,
+                                                   int width,
+                                                   int height,
+                                                   const std::vector<uint16_t>& pixels) const;
     [[nodiscard]] int manual_send_command(uint8_t cmd) const;
     [[nodiscard]] int manual_send_command(uint8_t cmd, const uint8_t* data, std::size_t len) const;
+    [[nodiscard]] int manual_send_command_unlocked(uint8_t cmd,
+                                                   const uint8_t* data,
+                                                   std::size_t len) const;
     [[nodiscard]] int manual_send_data(const uint8_t* data, std::size_t len) const;
+    [[nodiscard]] int manual_send_data_unlocked(const uint8_t* data, std::size_t len) const;
     [[nodiscard]] int manual_read_command(uint8_t cmd, uint8_t* data, std::size_t len) const;
+    [[nodiscard]] int manual_read_command_unlocked(uint8_t cmd,
+                                                   uint8_t* data,
+                                                   std::size_t len) const;
     void log_manual_panel_diagnostics() const;
     void prepare_surface_background(const shell::ShellPresentationFrame& frame) const;
     [[nodiscard]] std::string frame_signature(const shell::ShellPresentationFrame& frame) const;
     void ensure_scratch_capacity(std::size_t pixels) const;
-    void render_frame_to_scratch(const shell::ShellPresentationFrame& frame) const;
+    void render_frame_to_scratch(const shell::ShellPresentationFrame& frame,
+                                 int band_origin_y,
+                                 int band_height) const;
+    void present_frame_range(const shell::ShellPresentationFrame& frame,
+                             int y0,
+                             int y1) const;
+    [[nodiscard]] int first_body_line_y(const shell::ShellPresentationFrame& frame,
+                                        const shell::ShellPresentationFrame& previous) const;
+    [[nodiscard]] int last_body_line_bottom(const shell::ShellPresentationFrame& frame,
+                                            const shell::ShellPresentationFrame& previous) const;
     void scratch_fill_rect(int x, int y, int width, int height, uint16_t rgb565) const;
     void scratch_draw_text_block_scaled(int x,
                                         int y,
@@ -107,8 +138,13 @@ private:
     mutable bool last_surface_valid_ {false};
     mutable shell::ShellSurface last_surface_ {shell::ShellSurface::Home};
     mutable std::string last_frame_signature_;
+    mutable bool last_frame_available_ {false};
+    mutable shell::ShellPresentationFrame last_frame_;
     mutable std::vector<uint16_t> scratch_pixels_;
+    mutable int scratch_band_origin_y_ {0};
+    mutable int scratch_band_height_ {0};
     mutable bool suppress_boot_log_capture_ {false};
+    mutable k_mutex boot_log_mutex_ {};
 };
 
 }  // namespace aegis::ports::zephyr

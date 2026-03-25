@@ -14,6 +14,12 @@
 
 namespace aegis::ports::zephyr {
 
+enum class RotaryPhysicalEvent : uint8_t {
+    StepNext,
+    StepPrevious,
+    CenterPressed,
+};
+
 class ZephyrShellInputAdapter {
 public:
     ZephyrShellInputAdapter(platform::Logger& logger, ZephyrBoardBackendConfig config);
@@ -27,7 +33,7 @@ public:
     void accept_callback_action(shell::ShellNavigationAction action);
 
 private:
-    static void rotary_sampler_work_callback(k_work* work);
+    static void rotary_sampler_thread_entry(void* p1, void* p2, void* p3);
     [[nodiscard]] std::optional<shell::ShellNavigationAction> map_matrix_key(
         int row,
         int col,
@@ -35,6 +41,9 @@ private:
     void start_rotary_sampler();
     void sample_rotary_inputs();
     void enqueue_action(shell::ShellNavigationAction action);
+    void enqueue_rotary_event(RotaryPhysicalEvent event);
+    void process_direct_rotary_transition(uint32_t now_ms);
+    void process_direct_rotary_center(uint32_t now_ms);
     [[nodiscard]] std::optional<shell::ShellNavigationAction> poll_direct_rotary_action();
     [[nodiscard]] std::optional<shell::ShellNavigationAction> poll_direct_keyboard_action();
     [[nodiscard]] std::optional<shell::ShellNavigationAction> map_direct_key(uint8_t code,
@@ -48,6 +57,8 @@ private:
     gpio_dt_spec rotary_b_gpio_ {};
     gpio_dt_spec rotary_center_gpio_ {};
     bool interactive_mode_enabled_ {false};
+    bool callback_input_enabled_ {true};
+    bool board_direct_input_mode_ {false};
     bool keyboard_driver_ready_ {false};
     bool rotary_direct_ready_ {false};
     bool rotary_sampler_started_ {false};
@@ -57,8 +68,10 @@ private:
     bool rotary_center_last_pressed_ {false};
     bool rotary_center_debounced_state_ {false};
     bool rotary_center_last_reading_ {false};
+    bool rotary_center_press_latched_ {false};
     uint32_t rotary_center_last_debounce_ms_ {0};
     uint32_t last_rotary_action_ms_ {0};
+    uint32_t last_select_action_ms_ {0};
     bool deferred_rotary_state_valid_ {false};
     bool deferred_rotary_state_dirty_ {false};
     uint8_t deferred_rotary_a_ {0};
@@ -69,7 +82,8 @@ private:
     bool deferred_center_pressed_ {false};
     bool deferred_step_dirty_ {false};
     shell::ShellNavigationAction deferred_step_action_ {shell::ShellNavigationAction::Select};
-    k_work_delayable rotary_sampler_work_ {};
+    k_tid_t rotary_sampler_thread_ {nullptr};
+    bool rotary_sampler_stop_requested_ {false};
 };
 
 }  // namespace aegis::ports::zephyr

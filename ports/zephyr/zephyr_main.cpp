@@ -2,9 +2,6 @@
 #include <string>
 #include <vector>
 
-#include <zephyr/device.h>
-#include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/i2c.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/settings/settings.h>
@@ -18,7 +15,6 @@
 #include "ports/zephyr/zephyr_board_packages.hpp"
 #include "ports/zephyr/zephyr_boot_log_logger.hpp"
 #include "ports/zephyr/zephyr_build_config.hpp"
-#include "ports/zephyr/zephyr_gpio_pin.hpp"
 #include "ports/zephyr/zephyr_llext_adapter.hpp"
 #include "ports/zephyr/zephyr_logger.hpp"
 #include "ports/zephyr/zephyr_shell_display_adapter.hpp"
@@ -29,76 +25,6 @@
 namespace aegis::ports::zephyr {
 
 constexpr char kBootstrapDevicePackage[] = "zephyr_tlora_pager_sx1262";
-
-const struct device* gpio0_device() {
-    return DEVICE_DT_GET(DT_NODELABEL(gpio0));
-}
-
-void pulse_gpio(int pin, int pulses, int on_ms, int off_ms) {
-    if (pin < 0) {
-        return;
-    }
-
-    const auto pin_ref = resolve_gpio_pin(pin);
-    if (pin_ref.device == nullptr || !device_is_ready(pin_ref.device)) {
-        return;
-    }
-
-    gpio_pin_configure(pin_ref.device, pin_ref.pin, GPIO_OUTPUT_ACTIVE);
-    gpio_pin_set(pin_ref.device, pin_ref.pin, 1);
-
-    for (int index = 0; index < pulses; ++index) {
-        gpio_pin_set(pin_ref.device, pin_ref.pin, 0);
-        k_sleep(K_MSEC(on_ms));
-        gpio_pin_set(pin_ref.device, pin_ref.pin, 1);
-        k_sleep(K_MSEC(off_ms));
-    }
-}
-
-void signal_stage(const ZephyrBoardBackendConfig& config, int stage) {
-    pulse_gpio(config.display_backlight_pin, stage, 70, 90);
-}
-
-void prepare_shared_spi_bus(const ZephyrBoardBackendConfig& config) {
-    for (const auto pin : config.shared_spi_quiesce_pins) {
-        if (pin < 0) {
-            continue;
-        }
-        const auto pin_ref = resolve_gpio_pin(pin);
-        if (pin_ref.device != nullptr && device_is_ready(pin_ref.device)) {
-            gpio_pin_configure(pin_ref.device, pin_ref.pin, GPIO_OUTPUT_ACTIVE);
-            gpio_pin_set(pin_ref.device, pin_ref.pin, 1);
-        }
-    }
-
-    if (config.display_cs_pin >= 0) {
-        const auto pin_ref = resolve_gpio_pin(config.display_cs_pin);
-        if (pin_ref.device != nullptr && device_is_ready(pin_ref.device)) {
-            gpio_pin_configure(pin_ref.device, pin_ref.pin, GPIO_OUTPUT_ACTIVE);
-            gpio_pin_set(pin_ref.device, pin_ref.pin, 1);
-        }
-    }
-    if (config.display_dc_pin >= 0) {
-        const auto pin_ref = resolve_gpio_pin(config.display_dc_pin);
-        if (pin_ref.device != nullptr && device_is_ready(pin_ref.device)) {
-            gpio_pin_configure(pin_ref.device, pin_ref.pin, GPIO_OUTPUT_ACTIVE);
-            gpio_pin_set(pin_ref.device, pin_ref.pin, 1);
-        }
-    }
-    if (config.display_backlight_pin >= 0) {
-        const auto pin_ref = resolve_gpio_pin(config.display_backlight_pin);
-        if (pin_ref.device != nullptr && device_is_ready(pin_ref.device)) {
-            gpio_pin_configure(pin_ref.device, pin_ref.pin, GPIO_OUTPUT_ACTIVE);
-            gpio_pin_set(pin_ref.device, pin_ref.pin, 1);
-        }
-    }
-
-    k_sleep(K_MSEC(20));
-}
-
-void heartbeat(const ZephyrBoardBackendConfig& config) {
-    pulse_gpio(config.keyboard_backlight_pin, 1, 35, 35);
-}
 
 void run_shell_presentation_selftest(aegis::core::AegisCore& core, aegis::platform::Logger& logger) {
     const std::vector<aegis::shell::ShellNavigationAction> script {
@@ -180,7 +106,7 @@ extern "C" int main(void) {
     auto& board_runtime = aegis::ports::zephyr::tlora_pager_board_runtime(boot_logger);
     const bool board_runtime_ready = aegis::ports::zephyr::bootstrap_tlora_pager_board_runtime(boot_logger);
     board_runtime.log_state("pre-display");
-    aegis::ports::zephyr::signal_stage(board_config, 1);
+    board_runtime.signal_boot_stage(1);
     printk("AEGIS TRACE: stage 1\n");
     aegis::ports::zephyr::ZephyrShellDisplayAdapter display_adapter(boot_logger, board_config);
     aegis::ports::zephyr::ZephyrShellInputAdapter input_adapter(boot_logger, board_config);
@@ -192,7 +118,7 @@ extern "C" int main(void) {
         display_adapter.present_boot_log_screen("display-init");
         k_sleep(K_MSEC(3000));
     }
-    aegis::ports::zephyr::signal_stage(board_config, 2);
+    board_runtime.signal_boot_stage(2);
     printk("AEGIS TRACE: display init=%d\n", display_ready ? 1 : 0);
     boot_logger.info("zephyr", std::string("display adapter state: ") +
                                  (display_ready ? "ready" : "missing") + " " +
@@ -212,19 +138,19 @@ extern "C" int main(void) {
         core.attach_shell_presentation_sink(&display_adapter);
         display_adapter.present_boot_log_screen("core-attach");
     }
-    aegis::ports::zephyr::signal_stage(board_config, 3);
+    board_runtime.signal_boot_stage(3);
     esp_rom_printf("AEGIS ROM: core constructed\n");
     printk("AEGIS TRACE: core constructed\n");
     const bool input_ready = input_adapter.initialize();
     board_runtime.log_state("post-input-init");
-    aegis::ports::zephyr::signal_stage(board_config, 4);
+    board_runtime.signal_boot_stage(4);
     esp_rom_printf("AEGIS ROM: input init=%d\n", input_ready ? 1 : 0);
     printk("AEGIS TRACE: input init=%d\n", input_ready ? 1 : 0);
     if (display_ready) {
         display_adapter.present_boot_log_screen("input-ready");
     }
     core.boot(aegis::ports::zephyr::kBootstrapDevicePackage);
-    aegis::ports::zephyr::signal_stage(board_config, 5);
+    board_runtime.signal_boot_stage(5);
     esp_rom_printf("AEGIS ROM: core boot complete\n");
     printk("AEGIS TRACE: core boot complete\n");
     boot_logger.info("zephyr",
@@ -256,6 +182,8 @@ extern "C" int main(void) {
     }
     boot_logger.info("zephyr", "shell self-test launching");
     aegis::ports::zephyr::run_shell_presentation_selftest(core, boot_logger);
+    boot_logger.attach_display(nullptr);
+    boot_logger.info("zephyr", "boot log mirror detached for interactive runtime");
     input_adapter.enable_interactive_mode();
     boot_logger.info("zephyr", "interactive input enabled");
     printk("AEGIS TRACE: entering loop\n");
@@ -272,7 +200,7 @@ extern "C" int main(void) {
             ++loop_heartbeats;
             esp_rom_printf("AEGIS HEARTBEAT %d\n", loop_heartbeats);
             printk("AEGIS TRACE: heartbeat=%d\n", loop_heartbeats);
-            aegis::ports::zephyr::heartbeat(board_config);
+            board_runtime.heartbeat_pulse();
             if (loop_heartbeats <= 5 || (loop_heartbeats % 25) == 0) {
                 board_runtime.log_state("loop-heartbeat");
             }

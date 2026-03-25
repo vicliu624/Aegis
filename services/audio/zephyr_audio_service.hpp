@@ -2,13 +2,14 @@
 
 #include <string>
 
+#include "ports/zephyr/zephyr_board_backend_config.hpp"
 #include "services/common/service_interfaces.hpp"
 
 namespace aegis::services {
 
 class ZephyrAudioService : public IAudioService {
 public:
-    ZephyrAudioService(std::string output_device_name, std::string input_device_name);
+    explicit ZephyrAudioService(ports::zephyr::ZephyrBoardBackendConfig config);
 
     [[nodiscard]] bool output_available() const override;
     [[nodiscard]] bool input_available() const override;
@@ -17,8 +18,7 @@ public:
 private:
     [[nodiscard]] bool ready(const std::string& device_name) const;
 
-    std::string output_device_name_;
-    std::string input_device_name_;
+    ports::zephyr::ZephyrBoardBackendConfig config_;
 };
 
 }  // namespace aegis::services

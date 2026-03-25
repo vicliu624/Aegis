@@ -134,10 +134,29 @@ std::optional<std::string> AegisShell::handle_action(ShellNavigationAction actio
             }
             return std::nullopt;
         case ShellNavigationAction::Back:
-            controller_.show_launcher();
-            log_surface_summary();
-            log_launcher_focus();
-            present_frame("launcher", "back");
+            switch (controller_.navigation_state().surface()) {
+                case ShellSurface::Home:
+                    controller_.boot_to_home();
+                    log_surface_summary();
+                    present_frame("home", "back");
+                    break;
+                case ShellSurface::Launcher:
+                    controller_.boot_to_home();
+                    log_surface_summary();
+                    present_frame("home", "back");
+                    break;
+                case ShellSurface::Settings:
+                case ShellSurface::Notifications:
+                case ShellSurface::Recovery:
+                    controller_.show_launcher();
+                    log_surface_summary();
+                    log_launcher_focus();
+                    present_frame("launcher", "back");
+                    break;
+                case ShellSurface::AppForeground:
+                    logger_.info("shell", "back ignored while app owns foreground");
+                    break;
+            }
             return std::nullopt;
         case ShellNavigationAction::OpenMenu:
             controller_.boot_to_home();
@@ -231,15 +250,9 @@ ShellPresentationFrame AegisShell::build_frame(std::string headline, std::string
             break;
         case ShellSurface::Launcher: {
             frame.context = "catalog rotary=nav center=launch";
+            frame.headline = "launcher";
+            frame.detail = "apps=" + std::to_string(launcher_.entries().size());
             const auto entries = launcher_.entries();
-            if (const auto* focused = launcher_.focused_entry()) {
-                frame.headline = focused->descriptor.manifest.display_name;
-                frame.detail = "selected " + std::to_string(launcher_.focus_index() + 1) + "/" +
-                               std::to_string(entries.size());
-            } else {
-                frame.headline = "launcher";
-                frame.detail = "no selection";
-            }
             for (std::size_t index = 0; index < entries.size() && frame.lines.size() < 8; ++index) {
                 const auto& entry = entries[index];
                 std::string line =
@@ -311,7 +324,7 @@ void AegisShell::log_launcher_focus() const {
         logger_.info("shell",
                      "launcher focus=" + focused->descriptor.manifest.app_id + " index=" +
                          std::to_string(launcher_.focus_index()));
-        present_frame("launcher", "focus=" + focused->descriptor.manifest.display_name);
+        present_frame("launcher", "catalog");
     }
 }
 

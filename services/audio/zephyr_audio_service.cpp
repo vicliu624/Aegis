@@ -2,22 +2,48 @@
 
 #include <zephyr/device.h>
 
+#include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
+
 namespace aegis::services {
 
-ZephyrAudioService::ZephyrAudioService(std::string output_device_name, std::string input_device_name)
-    : output_device_name_(std::move(output_device_name)),
-      input_device_name_(std::move(input_device_name)) {}
+ZephyrAudioService::ZephyrAudioService(ports::zephyr::ZephyrBoardBackendConfig config)
+    : config_(std::move(config)) {}
 
 bool ZephyrAudioService::output_available() const {
-    return ready(output_device_name_);
+    if (!ready(config_.audio_output_device_name)) {
+        return false;
+    }
+    if (config_.board_family == "lilygo_tlora_pager") {
+        if (const auto* runtime = ports::zephyr::try_tlora_pager_board_runtime(); runtime != nullptr) {
+            return runtime->audio_ready();
+        }
+    }
+    return true;
 }
 
 bool ZephyrAudioService::input_available() const {
-    return ready(input_device_name_);
+    if (!ready(config_.audio_input_device_name)) {
+        return false;
+    }
+    if (config_.board_family == "lilygo_tlora_pager") {
+        if (const auto* runtime = ports::zephyr::try_tlora_pager_board_runtime(); runtime != nullptr) {
+            return runtime->audio_ready();
+        }
+    }
+    return true;
 }
 
 std::string ZephyrAudioService::backend_name() const {
-    return "zephyr-audio:out=" + output_device_name_ + ",in=" + input_device_name_;
+    if (config_.board_family == "lilygo_tlora_pager") {
+        if (const auto* runtime = ports::zephyr::try_tlora_pager_board_runtime(); runtime != nullptr) {
+            return std::string("zephyr-pager-audio:out=") + config_.audio_output_device_name +
+                   ",in=" + config_.audio_input_device_name +
+                   ",amp=" + (runtime->audio_ready() ? "ready" : "gated") +
+                   ",expander=" + (runtime->expander_ready() ? "ready" : "missing");
+        }
+    }
+    return "zephyr-audio:out=" + config_.audio_output_device_name +
+           ",in=" + config_.audio_input_device_name;
 }
 
 bool ZephyrAudioService::ready(const std::string& device_name) const {

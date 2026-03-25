@@ -207,17 +207,13 @@ void ZephyrDeviceAPackage::bind_services(device::ServiceBindingRegistry& binding
             .last_text = "",
             .source_name = "absent-text-input",
         }));
-    bindings.bind_radio(std::make_shared<services::ZephyrRadioService>(config.radio_device_name));
-    bindings.bind_gps(std::make_shared<services::ZephyrGpsService>(config.gps_device_name));
-    bindings.bind_audio(std::make_shared<services::ZephyrAudioService>(
-        config.audio_output_device_name,
-        config.audio_input_device_name));
-    bindings.bind_storage(std::make_shared<services::ZephyrStorageService>(kAppFsMountPoint));
-    bindings.bind_power(std::make_shared<services::ZephyrPowerService>());
+    bindings.bind_radio(std::make_shared<services::ZephyrRadioService>(config));
+    bindings.bind_gps(std::make_shared<services::ZephyrGpsService>(config));
+    bindings.bind_audio(std::make_shared<services::ZephyrAudioService>(config));
+    bindings.bind_storage(std::make_shared<services::ZephyrStorageService>(kAppFsMountPoint, config));
+    bindings.bind_power(std::make_shared<services::ZephyrPowerService>(config));
     bindings.bind_time(std::make_shared<services::ZephyrTimeService>());
-    bindings.bind_hostlink(std::make_shared<services::ZephyrHostlinkService>(
-        config.hostlink_device_name,
-        config.hostlink_bridge_name));
+    bindings.bind_hostlink(std::make_shared<services::ZephyrHostlinkService>(config));
     bind_common_services(bindings, logger);
 }
 
@@ -251,17 +247,13 @@ void ZephyrDeviceBPackage::bind_services(device::ServiceBindingRegistry& binding
             .last_text = "",
             .source_name = "zephyr-generic-keyboard",
         }));
-    bindings.bind_radio(std::make_shared<services::ZephyrRadioService>(config.radio_device_name));
-    bindings.bind_gps(std::make_shared<services::ZephyrGpsService>(config.gps_device_name));
-    bindings.bind_audio(std::make_shared<services::ZephyrAudioService>(
-        config.audio_output_device_name,
-        config.audio_input_device_name));
-    bindings.bind_storage(std::make_shared<services::ZephyrStorageService>(kAppFsMountPoint));
-    bindings.bind_power(std::make_shared<services::ZephyrPowerService>());
+    bindings.bind_radio(std::make_shared<services::ZephyrRadioService>(config));
+    bindings.bind_gps(std::make_shared<services::ZephyrGpsService>(config));
+    bindings.bind_audio(std::make_shared<services::ZephyrAudioService>(config));
+    bindings.bind_storage(std::make_shared<services::ZephyrStorageService>(kAppFsMountPoint, config));
+    bindings.bind_power(std::make_shared<services::ZephyrPowerService>(config));
     bindings.bind_time(std::make_shared<services::ZephyrTimeService>());
-    bindings.bind_hostlink(
-        std::make_shared<services::ZephyrHostlinkService>(config.hostlink_device_name,
-                                                          config.hostlink_bridge_name));
+    bindings.bind_hostlink(std::make_shared<services::ZephyrHostlinkService>(config));
     bind_common_services(bindings, logger);
 }
 
@@ -297,17 +289,13 @@ void ZephyrTloraPagerSx1262Package::bind_services(device::ServiceBindingRegistry
         "keyboard+rotary binding via " + config.keyboard_device_name + "+" +
             config.rotary_device_name));
     bindings.bind_text_input(std::make_shared<services::ZephyrTextInputService>(config));
-    bindings.bind_radio(std::make_shared<services::ZephyrRadioService>(config.radio_device_name));
-    bindings.bind_gps(std::make_shared<services::ZephyrGpsService>(config.gps_device_name));
-    bindings.bind_audio(std::make_shared<services::ZephyrAudioService>(
-        config.audio_output_device_name,
-        config.audio_input_device_name));
-    bindings.bind_storage(std::make_shared<services::ZephyrStorageService>(kAppFsMountPoint));
-    bindings.bind_power(std::make_shared<services::ZephyrPowerService>());
+    bindings.bind_radio(std::make_shared<services::ZephyrRadioService>(config));
+    bindings.bind_gps(std::make_shared<services::ZephyrGpsService>(config));
+    bindings.bind_audio(std::make_shared<services::ZephyrAudioService>(config));
+    bindings.bind_storage(std::make_shared<services::ZephyrStorageService>(kAppFsMountPoint, config));
+    bindings.bind_power(std::make_shared<services::ZephyrPowerService>(config));
     bindings.bind_time(std::make_shared<services::ZephyrTimeService>());
-    bindings.bind_hostlink(std::make_shared<services::ZephyrHostlinkService>(
-        config.hostlink_device_name,
-        config.hostlink_bridge_name));
+    bindings.bind_hostlink(std::make_shared<services::ZephyrHostlinkService>(config));
     bind_common_services(bindings, logger);
     logger.info("board",
                 "services bound for " + config.backend_id + " display=" + config.display_device_name +
