@@ -1,8 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <vector>
 
 #include "platform/logging/logger.hpp"
 #include "ports/zephyr/zephyr_board_backend_config.hpp"
@@ -19,7 +19,8 @@ public:
                               int y,
                               int width,
                               int height,
-                              const std::vector<uint16_t>& pixels) const = 0;
+                              const uint16_t* pixels,
+                              std::size_t count) const = 0;
 };
 
 [[nodiscard]] std::unique_ptr<IZephyrShellDisplayBackend> make_zephyr_shell_display_backend(

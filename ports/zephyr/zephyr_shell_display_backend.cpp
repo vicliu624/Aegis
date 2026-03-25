@@ -53,18 +53,19 @@ public:
                       int y,
                       int width,
                       int height,
-                      const std::vector<uint16_t>& pixels) const override {
-        if (display_device_ == nullptr || !device_is_ready(display_device_)) {
+                      const uint16_t* pixels,
+                      std::size_t count) const override {
+        if (display_device_ == nullptr || !device_is_ready(display_device_) || pixels == nullptr || count == 0) {
             return;
         }
         display_buffer_descriptor desc {
-            .buf_size = static_cast<uint32_t>(pixels.size() * sizeof(uint16_t)),
+            .buf_size = static_cast<uint32_t>(count * sizeof(uint16_t)),
             .width = static_cast<uint16_t>(width),
             .height = static_cast<uint16_t>(height),
             .pitch = static_cast<uint16_t>(width),
             .frame_incomplete = false,
         };
-        display_write(display_device_, x, y, &desc, pixels.data());
+        display_write(display_device_, x, y, &desc, pixels);
     }
 
 private:

@@ -133,6 +133,8 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_runtime.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_packages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_support.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/zephyr_lvgl_assets.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/zephyr_lvgl_shell_ui.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_shell_display_backend.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_shell_input_backend.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_shell_display_adapter.cpp

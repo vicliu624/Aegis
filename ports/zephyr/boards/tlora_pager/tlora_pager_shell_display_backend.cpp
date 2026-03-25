@@ -111,7 +111,8 @@ public:
                       int y,
                       int width,
                       int height,
-                      const std::vector<uint16_t>& pixels) const override;
+                      const uint16_t* pixels,
+                      std::size_t count) const override;
 
 private:
     enum class BackendKind {
@@ -129,13 +130,13 @@ private:
     [[nodiscard]] bool raw_backend_ready() const;
     [[nodiscard]] int manual_send_command(uint8_t cmd, const uint8_t* data, std::size_t len) const;
     [[nodiscard]] int manual_send_command_unlocked(uint8_t cmd, const uint8_t* data, std::size_t len) const;
-    [[nodiscard]] int manual_write_pixels(int x, int y, int width, int height, const std::vector<uint16_t>& pixels) const;
-    [[nodiscard]] int manual_write_pixels_unlocked(int x, int y, int width, int height, const std::vector<uint16_t>& pixels) const;
+    [[nodiscard]] int manual_write_pixels(int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) const;
+    [[nodiscard]] int manual_write_pixels_unlocked(int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) const;
     [[nodiscard]] int raw_send_command(uint8_t cmd, const uint8_t* data, std::size_t len) const;
     [[nodiscard]] int raw_send_command_unlocked(uint8_t cmd, const uint8_t* data, std::size_t len) const;
     [[nodiscard]] int raw_set_cursor(uint16_t x, uint16_t y, uint16_t width, uint16_t height) const;
-    [[nodiscard]] int raw_write_pixels(int x, int y, int width, int height, const std::vector<uint16_t>& pixels) const;
-    [[nodiscard]] int raw_write_pixels_unlocked(int x, int y, int width, int height, const std::vector<uint16_t>& pixels) const;
+    [[nodiscard]] int raw_write_pixels(int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) const;
+    [[nodiscard]] int raw_write_pixels_unlocked(int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) const;
 
     platform::Logger& logger_;
     ZephyrBoardRuntime& runtime_;
@@ -406,18 +407,18 @@ int PagerDisplayBackend::manual_send_command_unlocked(uint8_t cmd, const uint8_t
     return rc;
 }
 
-int PagerDisplayBackend::manual_write_pixels(int x, int y, int width, int height, const std::vector<uint16_t>& pixels) const {
+int PagerDisplayBackend::manual_write_pixels(int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) const {
     if (runtime_.ready()) {
         return runtime_.with_coordination_domain(ZephyrBoardCoordinationDomain::DisplayPipeline,
                                                  K_MSEC(50),
                                                  "display.manual_write_pixels",
-                                                 [&]() { return manual_write_pixels_unlocked(x, y, width, height, pixels); });
+                                                 [&]() { return manual_write_pixels_unlocked(x, y, width, height, pixels, count); });
     }
-    return manual_write_pixels_unlocked(x, y, width, height, pixels);
+    return manual_write_pixels_unlocked(x, y, width, height, pixels, count);
 }
 
-int PagerDisplayBackend::manual_write_pixels_unlocked(int x, int y, int width, int height, const std::vector<uint16_t>& pixels) const {
-    if (!manual_backend_ready()) {
+int PagerDisplayBackend::manual_write_pixels_unlocked(int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) const {
+    if (!manual_backend_ready() || pixels == nullptr || count == 0) {
         return -19;
     }
     const uint16_t xs = static_cast<uint16_t>(x + config_.display_x_gap);
@@ -453,7 +454,7 @@ int PagerDisplayBackend::manual_write_pixels_unlocked(int x, int y, int width, i
     if (rc == 0) { rc = write_bytes(row_params.data(), row_params.size(), false); }
     if (rc == 0) { rc = write_bytes(&ramwr_cmd, sizeof(ramwr_cmd), true); }
     if (rc == 0) {
-        rc = write_bytes(reinterpret_cast<const uint8_t*>(pixels.data()), pixels.size() * sizeof(uint16_t), false);
+        rc = write_bytes(reinterpret_cast<const uint8_t*>(pixels), count * sizeof(uint16_t), false);
     }
     gpio_pin_set(cs_ref.device, cs_ref.pin, 1);
     gpio_pin_set(dc_ref.device, dc_ref.pin, 1);
@@ -497,18 +498,18 @@ int PagerDisplayBackend::raw_set_cursor(uint16_t x, uint16_t y, uint16_t width, 
                                      sizeof(address_data));
 }
 
-int PagerDisplayBackend::raw_write_pixels(int x, int y, int width, int height, const std::vector<uint16_t>& pixels) const {
+int PagerDisplayBackend::raw_write_pixels(int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) const {
     if (runtime_.ready()) {
         return runtime_.with_coordination_domain(ZephyrBoardCoordinationDomain::DisplayPipeline,
                                                  K_MSEC(50),
                                                  "display.raw_write_pixels",
-                                                 [&]() { return raw_write_pixels_unlocked(x, y, width, height, pixels); });
+                                                 [&]() { return raw_write_pixels_unlocked(x, y, width, height, pixels, count); });
     }
-    return raw_write_pixels_unlocked(x, y, width, height, pixels);
+    return raw_write_pixels_unlocked(x, y, width, height, pixels, count);
 }
 
-int PagerDisplayBackend::raw_write_pixels_unlocked(int x, int y, int width, int height, const std::vector<uint16_t>& pixels) const {
-    if (!raw_backend_ready()) {
+int PagerDisplayBackend::raw_write_pixels_unlocked(int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) const {
+    if (!raw_backend_ready() || pixels == nullptr || count == 0) {
         return -19;
     }
     const int rc = raw_set_cursor(static_cast<uint16_t>(x),
@@ -523,7 +524,7 @@ int PagerDisplayBackend::raw_write_pixels_unlocked(int x, int y, int width, int 
         return memory_write_rc;
     }
     display_buffer_descriptor desc {
-        .buf_size = static_cast<uint32_t>(pixels.size() * sizeof(uint16_t)),
+        .buf_size = static_cast<uint32_t>(count * sizeof(uint16_t)),
         .width = static_cast<uint16_t>(width),
         .height = static_cast<uint16_t>(height),
         .pitch = static_cast<uint16_t>(width),
@@ -532,32 +533,35 @@ int PagerDisplayBackend::raw_write_pixels_unlocked(int x, int y, int width, int 
     auto raw_config = make_raw_mipi_config();
     return mipi_dbi_write_display(raw_mipi_device_,
                                   &raw_config,
-                                  reinterpret_cast<const uint8_t*>(pixels.data()),
+                                  reinterpret_cast<const uint8_t*>(pixels),
                                   &desc,
                                   PIXEL_FORMAT_RGB_565);
 }
 
-void PagerDisplayBackend::write_region(int x, int y, int width, int height, const std::vector<uint16_t>& pixels) const {
+void PagerDisplayBackend::write_region(int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) const {
+    if (pixels == nullptr || count == 0) {
+        return;
+    }
     if (backend_ == BackendKind::DisplayApi) {
         if (display_device_ == nullptr || !device_is_ready(display_device_)) {
             return;
         }
         display_buffer_descriptor desc {
-            .buf_size = static_cast<uint32_t>(pixels.size() * sizeof(uint16_t)),
+            .buf_size = static_cast<uint32_t>(count * sizeof(uint16_t)),
             .width = static_cast<uint16_t>(width),
             .height = static_cast<uint16_t>(height),
             .pitch = static_cast<uint16_t>(width),
             .frame_incomplete = false,
         };
-        display_write(display_device_, x, y, &desc, pixels.data());
+        display_write(display_device_, x, y, &desc, pixels);
         return;
     }
     if (backend_ == BackendKind::ManualSpi) {
-        (void)manual_write_pixels(x, y, width, height, pixels);
+        (void)manual_write_pixels(x, y, width, height, pixels, count);
         return;
     }
     if (backend_ == BackendKind::RawMipiDbi) {
-        (void)raw_write_pixels(x, y, width, height, pixels);
+        (void)raw_write_pixels(x, y, width, height, pixels, count);
     }
 }
 

@@ -125,8 +125,9 @@ extern "C" int main(void) {
 
     const bool display_ready = display_adapter.initialize();
     if (display_ready) {
-        display_adapter.present_boot_log_screen("display-init");
-        k_sleep(K_MSEC(3000));
+        display_adapter.present_boot_log_screen("Initializing display");
+        display_adapter.tick(16);
+        k_sleep(K_MSEC(500));
     }
     board_runtime.signal_boot_stage(board_descriptor.bringup.display_ready_signal_stage);
     printk("AEGIS TRACE: display init=%d\n", display_ready ? 1 : 0);
@@ -136,8 +137,8 @@ extern "C" int main(void) {
                                  " board-runtime=" + (board_runtime_ready ? std::string("ready")
                                                                           : std::string("degraded")));
     if (display_ready) {
-        display_adapter.present_boot_log_screen("display-ready");
-        k_sleep(K_MSEC(3000));
+        display_adapter.present_boot_log_screen("Loading runtime");
+        display_adapter.tick(16);
     }
 
     aegis::core::AegisCore core(app_source,
@@ -146,7 +147,8 @@ extern "C" int main(void) {
                                 std::move(loader_backend));
     if (display_ready) {
         core.attach_shell_presentation_sink(&display_adapter);
-        display_adapter.present_boot_log_screen("core-attach");
+        display_adapter.present_boot_log_screen("Preparing shell");
+        display_adapter.tick(16);
     }
     board_runtime.signal_boot_stage(board_descriptor.bringup.core_ready_signal_stage);
     esp_rom_printf("AEGIS ROM: core constructed\n");
@@ -157,7 +159,8 @@ extern "C" int main(void) {
     esp_rom_printf("AEGIS ROM: input init=%d\n", input_ready ? 1 : 0);
     printk("AEGIS TRACE: input init=%d\n", input_ready ? 1 : 0);
     if (display_ready) {
-        display_adapter.present_boot_log_screen("input-ready");
+        display_adapter.present_boot_log_screen("Input ready");
+        display_adapter.tick(16);
     }
     core.boot(aegis::ports::zephyr::kBootstrapDevicePackage);
     board_runtime.signal_boot_stage(board_descriptor.bringup.interactive_ready_signal_stage);
@@ -208,6 +211,7 @@ extern "C" int main(void) {
         if (const auto action = input_adapter.poll_action(); action.has_value()) {
             core.run_shell_action_sequence({*action});
         }
+        display_adapter.tick(8);
         ++heartbeat_ticks;
         if (heartbeat_ticks >= 50) {
             heartbeat_ticks = 0;

@@ -225,10 +225,23 @@ bool ZephyrShellDisplayAdapter::initialize() {
     }
 
     backend_ = BackendKind::DisplayApi;
-    if (config_.display_smoke_test) {
-        run_smoke_test();
+    lvgl_ui_ = std::make_unique<ZephyrLvglShellUi>(
+        logger_,
+        config_,
+        [this](int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) {
+            write_lvgl_region(x, y, width, height, pixels, count);
+        });
+    if (lvgl_ui_ != nullptr && !lvgl_ui_->initialize()) {
+        logger_.info("lvgl", "shell ui init failed, keeping legacy renderer");
+        lvgl_ui_.reset();
     }
-    fill_display(color_for(shell::ShellSurface::Home));
+
+    if (lvgl_ui_ == nullptr) {
+        if (config_.display_smoke_test) {
+            run_smoke_test();
+        }
+        fill_display(color_for(shell::ShellSurface::Home));
+    }
     return true;
 }
 
@@ -468,6 +481,17 @@ void ZephyrShellDisplayAdapter::present(const shell::ShellPresentationFrame& fra
         return;
     }
 
+    if (lvgl_ui_ != nullptr) {
+        lvgl_ui_->present(frame);
+        last_surface_valid_ = true;
+        last_surface_ = frame.surface;
+        last_frame_signature_ = frame_signature(frame);
+        last_frame_available_ = true;
+        last_frame_ = frame;
+        log_frame(frame);
+        return;
+    }
+
     const uint32_t start_ms = k_uptime_get_32();
     const auto signature = frame_signature(frame);
     if (signature == last_frame_signature_) {
@@ -509,6 +533,12 @@ void ZephyrShellDisplayAdapter::present(const shell::ShellPresentationFrame& fra
     log_frame(frame);
 }
 
+void ZephyrShellDisplayAdapter::tick(uint32_t elapsed_ms) {
+    if (lvgl_ui_ != nullptr) {
+        lvgl_ui_->tick(elapsed_ms);
+    }
+}
+
 void ZephyrShellDisplayAdapter::record_boot_log(std::string_view category, std::string_view message) {
     if (!config_.display_boot_log_mirror || suppress_boot_log_capture_) {
         return;
@@ -528,8 +558,25 @@ void ZephyrShellDisplayAdapter::record_boot_log(std::string_view category, std::
     (void)k_mutex_unlock(&boot_log_mutex_);
 }
 
+void ZephyrShellDisplayAdapter::write_lvgl_region(int x,
+                                                  int y,
+                                                  int width,
+                                                  int height,
+                                                  const uint16_t* pixels,
+                                                  std::size_t count) const {
+    if (display_backend_ == nullptr || pixels == nullptr || count == 0) {
+        return;
+    }
+    display_backend_->write_region(x, y, width, height, pixels, count);
+}
+
 void ZephyrShellDisplayAdapter::present_boot_log_screen(std::string_view stage) const {
     if (backend_ == BackendKind::None) {
+        return;
+    }
+
+    if (lvgl_ui_ != nullptr) {
+        lvgl_ui_->show_startup_splash(stage);
         return;
     }
 
@@ -1075,7 +1122,7 @@ void ZephyrShellDisplayAdapter::write_region(int x,
         return;
     }
     if (display_backend_ != nullptr) {
-        display_backend_->write_region(x, y, width, height, pixels);
+        display_backend_->write_region(x, y, width, height, pixels.data(), pixels.size());
     }
 }
 

@@ -16,6 +16,7 @@
 #include "platform/logging/logger.hpp"
 #include "ports/zephyr/zephyr_board_backend_config.hpp"
 #include "ports/zephyr/zephyr_board_runtime.hpp"
+#include "ports/zephyr/zephyr_lvgl_shell_ui.hpp"
 #include "ports/zephyr/zephyr_shell_display_backend.hpp"
 #include "shell/presentation/shell_presentation_sink.hpp"
 
@@ -31,6 +32,7 @@ public:
     void present(const shell::ShellPresentationFrame& frame) override;
     void record_boot_log(std::string_view category, std::string_view message);
     void present_boot_log_screen(std::string_view stage) const;
+    void tick(uint32_t elapsed_ms);
 
 private:
     enum class BackendKind {
@@ -130,11 +132,18 @@ private:
                                    int scale) const;
     void scratch_write_pixel(int x, int y, uint16_t rgb565) const;
     void blit_scratch() const;
+    void write_lvgl_region(int x,
+                           int y,
+                           int width,
+                           int height,
+                           const uint16_t* pixels,
+                           std::size_t count) const;
 
     platform::Logger& logger_;
     ZephyrBoardRuntime& runtime_;
     ZephyrBoardBackendConfig config_;
     std::unique_ptr<IZephyrShellDisplayBackend> display_backend_;
+    std::unique_ptr<ZephyrLvglShellUi> lvgl_ui_;
     BackendKind backend_ {BackendKind::None};
     const struct device* display_device_ {nullptr};
     const struct device* raw_mipi_device_ {nullptr};

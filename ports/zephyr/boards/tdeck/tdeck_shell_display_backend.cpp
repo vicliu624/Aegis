@@ -43,7 +43,8 @@ public:
                       int y,
                       int width,
                       int height,
-                      const std::vector<uint16_t>& pixels) const override;
+                      const uint16_t* pixels,
+                      std::size_t count) const override;
 
 private:
     [[nodiscard]] bool backend_ready() const;
@@ -54,12 +55,14 @@ private:
                                    int y,
                                    int width,
                                    int height,
-                                   const std::vector<uint16_t>& pixels) const;
+                                   const uint16_t* pixels,
+                                   std::size_t count) const;
     [[nodiscard]] int write_pixels_unlocked(int x,
                                             int y,
                                             int width,
                                             int height,
-                                            const std::vector<uint16_t>& pixels) const;
+                                            const uint16_t* pixels,
+                                            std::size_t count) const;
 
     platform::Logger& logger_;
     ZephyrBoardRuntime& runtime_;
@@ -164,8 +167,9 @@ void TdeckDisplayBackend::write_region(int x,
                                        int y,
                                        int width,
                                        int height,
-                                       const std::vector<uint16_t>& pixels) const {
-    (void)write_pixels(x, y, width, height, pixels);
+                                       const uint16_t* pixels,
+                                       std::size_t count) const {
+    (void)write_pixels(x, y, width, height, pixels, count);
 }
 
 bool TdeckDisplayBackend::backend_ready() const {
@@ -219,22 +223,24 @@ int TdeckDisplayBackend::write_pixels(int x,
                                       int y,
                                       int width,
                                       int height,
-                                      const std::vector<uint16_t>& pixels) const {
+                                      const uint16_t* pixels,
+                                      std::size_t count) const {
     if (runtime_.ready()) {
         return runtime_.with_coordination_domain(ZephyrBoardCoordinationDomain::DisplayPipeline,
                                                  K_MSEC(50),
                                                  "display.tdeck_write_pixels",
-                                                 [&]() { return write_pixels_unlocked(x, y, width, height, pixels); });
+                                                 [&]() { return write_pixels_unlocked(x, y, width, height, pixels, count); });
     }
-    return write_pixels_unlocked(x, y, width, height, pixels);
+    return write_pixels_unlocked(x, y, width, height, pixels, count);
 }
 
 int TdeckDisplayBackend::write_pixels_unlocked(int x,
                                                int y,
                                                int width,
                                                int height,
-                                               const std::vector<uint16_t>& pixels) const {
-    if (!backend_ready()) {
+                                               const uint16_t* pixels,
+                                               std::size_t count) const {
+    if (!backend_ready() || pixels == nullptr || count == 0) {
         return -19;
     }
     const uint16_t xs = static_cast<uint16_t>(x + config_.display_x_gap);
@@ -277,8 +283,8 @@ int TdeckDisplayBackend::write_pixels_unlocked(int x,
         rc = write_bytes(&ramwr_cmd, sizeof(ramwr_cmd), true);
     }
     if (rc == 0) {
-        rc = write_bytes(reinterpret_cast<const uint8_t*>(pixels.data()),
-                         pixels.size() * sizeof(uint16_t),
+        rc = write_bytes(reinterpret_cast<const uint8_t*>(pixels),
+                         count * sizeof(uint16_t),
                          false);
     }
     (void)gpio_pin_set(cs_ref.device, cs_ref.pin, 1);
