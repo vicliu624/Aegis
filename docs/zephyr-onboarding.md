@@ -358,7 +358,7 @@ Once the host tools are installed, verify from the repository root.
 On Linux or WSL, start with:
 
 ```bash
-python3 scripts/check_linux_env.py
+python scripts/build_zephyr.py check-linux-env
 ```
 
 This performs a fast scan for the most common missing prerequisites:
@@ -372,6 +372,12 @@ This performs a fast scan for the most common missing prerequisites:
 - `ZEPHYR_BASE`
 
 It is meant to catch the most common onboarding misses before you run the full Zephyr configure step.
+
+If you want to invoke the lower-level helper directly, it still exists at:
+
+```bash
+python3 scripts/check_linux_env.py
+```
 
 ### 11.2 Inspect the planned build commands
 
@@ -495,6 +501,7 @@ On minimal Linux or WSL environments, the missing piece is often simply `python3
 If you are preparing a new machine for someone else, hand off only after all of these pass:
 
 - `python3 scripts/check_linux_env.py` on Linux/WSL hosts
+- `python scripts/build_zephyr.py check-linux-env` on Linux/WSL hosts
 - `python --version`
 - `cmake --version`
 - `ninja --version`

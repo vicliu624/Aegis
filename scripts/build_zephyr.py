@@ -24,6 +24,7 @@ DEFAULT_FLASH_CHIP = "esp32s3"
 class Paths:
     repo_root: pathlib.Path
     zephyr_source: pathlib.Path
+    linux_check_script: pathlib.Path
 
 
 def shell_join(command: Sequence[str]) -> str:
@@ -38,9 +39,20 @@ def run(command: Sequence[str], cwd: pathlib.Path) -> None:
     subprocess.run(list(command), cwd=str(cwd), check=True)
 
 
+def run_passthrough(command: Sequence[str], cwd: pathlib.Path) -> int:
+    print(f"[aegis-build] cwd={cwd}", flush=True)
+    print(f"[aegis-build] cmd={shell_join(command)}", flush=True)
+    result = subprocess.run(list(command), cwd=str(cwd), check=False)
+    return result.returncode
+
+
 def resolve_paths() -> Paths:
     repo_root = pathlib.Path(__file__).resolve().parents[1]
-    return Paths(repo_root=repo_root, zephyr_source=repo_root / "ports" / "zephyr")
+    return Paths(
+        repo_root=repo_root,
+        zephyr_source=repo_root / "ports" / "zephyr",
+        linux_check_script=repo_root / "scripts" / "check_linux_env.py",
+    )
 
 
 def default_cmake_generator() -> str:
@@ -241,6 +253,13 @@ def command_print_plan(args: argparse.Namespace, paths: Paths) -> None:
         print(f"{label}: {shell_join(command)}")
 
 
+def command_check_linux_env(args: argparse.Namespace, paths: Paths) -> None:
+    del args
+    exit_code = run_passthrough([sys.executable, str(paths.linux_check_script)], paths.repo_root)
+    if exit_code != 0:
+        raise SystemExit(exit_code)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Cross-platform build and flash driver for the Aegis Zephyr target."
@@ -248,6 +267,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     commands = {
+        "check-linux-env": command_check_linux_env,
         "configure": command_configure,
         "build-firmware": command_build_firmware,
         "flash-firmware": command_flash_firmware,
@@ -260,7 +280,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     for name in commands:
         subparser = subparsers.add_parser(name)
-        add_common_arguments(subparser)
+        if name != "check-linux-env":
+            add_common_arguments(subparser)
         subparser.set_defaults(handler=commands[name])
 
     return parser
