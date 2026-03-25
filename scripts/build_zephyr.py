@@ -33,6 +33,7 @@ class Paths:
     host_check_script: pathlib.Path
     linux_check_script: pathlib.Path
     pager_verify_script: pathlib.Path
+    tdeck_verify_script: pathlib.Path
 
 
 def shell_join(command: Sequence[str]) -> str:
@@ -75,6 +76,7 @@ def resolve_paths() -> Paths:
         host_check_script=repo_root / "scripts" / "check_host_env.py",
         linux_check_script=repo_root / "scripts" / "check_linux_env.py",
         pager_verify_script=repo_root / "scripts" / "verify_pager_boot.py",
+        tdeck_verify_script=repo_root / "scripts" / "verify_tdeck_boot.py",
     )
 
 
@@ -297,12 +299,18 @@ def command_check_board_baseline(args: argparse.Namespace, paths: Paths) -> None
     command_check_host_env(argparse.Namespace(mode="auto", json=False), paths)
     command_build_all(args, paths)
     if args.port:
+        bootstrap_package = resolve_bootstrap_package(args)
         command_flash_firmware(args, paths)
         command_flash_appfs(args, paths)
+        verify_script = (
+            paths.tdeck_verify_script
+            if bootstrap_package == "zephyr_tdeck_sx1262"
+            else paths.pager_verify_script
+        )
         run(
             [
                 sys.executable,
-                str(paths.pager_verify_script),
+                str(verify_script),
                 "--port",
                 args.port,
             ],

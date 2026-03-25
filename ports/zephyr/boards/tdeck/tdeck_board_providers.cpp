@@ -1,4 +1,4 @@
-#include "ports/zephyr/zephyr_tdeck_board_providers.hpp"
+#include "ports/zephyr/boards/tdeck/tdeck_board_providers.hpp"
 
 #include <cerrno>
 
@@ -28,6 +28,7 @@ constexpr uint8_t kAxp2101BatteryPercentRegister = 0xA4;
 constexpr uint8_t kAxp2101BattVoltageHighRegister = 0x34;
 constexpr uint8_t kTdeckBatteryAdcChannel = 3;
 constexpr uint8_t kTdeckBatteryAdcResolution = 12;
+constexpr int kAdcInternalReferenceMv = 1100;
 constexpr uint8_t kTdeckKeyboardBrightnessCmd = 0x01;
 constexpr uint8_t kTdeckKeyboardDefaultBrightnessCmd = 0x02;
 constexpr uint8_t kTdeckKeyboardModeKeyCmd = 0x04;
@@ -657,16 +658,18 @@ std::optional<int> ZephyrTdeckBoardControlProvider::read_battery_adc_mv() const 
         return std::nullopt;
     }
 
-    int32_t mv = sample;
-    if (adc_raw_to_millivolts(adc_ref_internal(adc_device_),
-                              ADC_GAIN_1_4,
-                              kTdeckBatteryAdcResolution,
-                              &mv) != 0 ||
-        mv <= 0) {
+    if (sample <= 0) {
         return std::nullopt;
     }
 
-    return static_cast<int>(mv * 2);
+    constexpr int kAdcMaxSample = (1 << kTdeckBatteryAdcResolution) - 1;
+    const int64_t sensed_mv =
+        (static_cast<int64_t>(sample) * kAdcInternalReferenceMv * 4) / kAdcMaxSample;
+    if (sensed_mv <= 0) {
+        return std::nullopt;
+    }
+
+    return static_cast<int>(sensed_mv * 2);
 }
 
 int ZephyrTdeckBoardControlProvider::battery_percent_from_mv(int mv) const {

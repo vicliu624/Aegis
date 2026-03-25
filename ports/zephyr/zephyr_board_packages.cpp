@@ -209,8 +209,12 @@ void ZephyrTdeckSx1262Package::bind_services(device::ServiceBindingRegistry& bin
 
 std::vector<device::BoardPackagePtr> make_zephyr_board_packages() {
     std::vector<device::BoardPackagePtr> packages;
+#if defined(AEGIS_ZEPHYR_HAS_TLORA_PAGER_FAMILY)
     packages.push_back(std::make_shared<ZephyrTloraPagerSx1262Package>());
+#endif
+#if defined(AEGIS_ZEPHYR_HAS_TDECK_FAMILY)
     packages.push_back(std::make_shared<ZephyrTdeckSx1262Package>());
+#endif
     packages.push_back(std::make_shared<ZephyrDeviceAPackage>());
     packages.push_back(std::make_shared<ZephyrDeviceBPackage>());
     return packages;

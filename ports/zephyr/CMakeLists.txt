@@ -49,6 +49,23 @@ if(NOT "${AEGIS_ZEPHYR_LOCAL_PATCH_STDERR}" STREQUAL "")
     message(STATUS "${AEGIS_ZEPHYR_LOCAL_PATCH_STDERR}")
 endif()
 
+set(AEGIS_ZEPHYR_BOARD_FAMILY "generic")
+set(AEGIS_ZEPHYR_BOARD_EXTRA_CONF "")
+if(AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE STREQUAL "zephyr_tlora_pager_sx1262")
+    set(AEGIS_ZEPHYR_BOARD_FAMILY "tlora_pager")
+    set(AEGIS_ZEPHYR_BOARD_EXTRA_CONF
+        "${CMAKE_CURRENT_LIST_DIR}/boards/tlora_pager/prj.conf")
+elseif(AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE STREQUAL "zephyr_tdeck_sx1262")
+    set(AEGIS_ZEPHYR_BOARD_FAMILY "tdeck")
+    set(AEGIS_ZEPHYR_BOARD_EXTRA_CONF
+        "${CMAKE_CURRENT_LIST_DIR}/boards/tdeck/prj.conf")
+endif()
+
+set(CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/prj.conf")
+if(NOT "${AEGIS_ZEPHYR_BOARD_EXTRA_CONF}" STREQUAL "")
+    list(APPEND CONF_FILE "${AEGIS_ZEPHYR_BOARD_EXTRA_CONF}")
+endif()
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(aegis_zephyr_target)
 
@@ -95,7 +112,14 @@ target_compile_definitions(app PRIVATE
     AEGIS_ZEPHYR_APPFS_MOUNT_POINT=\"/lfs\"
     AEGIS_ZEPHYR_APPFS_APPS_ROOT=\"/lfs/apps\"
     AEGIS_ZEPHYR_BOOT_SELFTEST_APP_ID=\"${AEGIS_ZEPHYR_BOOT_SELFTEST_APP_ID}\"
-    AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE=\"${AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE}\")
+    AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE=\"${AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE}\"
+    AEGIS_ZEPHYR_BOARD_FAMILY=\"${AEGIS_ZEPHYR_BOARD_FAMILY}\")
+
+if(AEGIS_ZEPHYR_BOARD_FAMILY STREQUAL "tlora_pager")
+    target_compile_definitions(app PRIVATE AEGIS_ZEPHYR_HAS_TLORA_PAGER_FAMILY=1)
+elseif(AEGIS_ZEPHYR_BOARD_FAMILY STREQUAL "tdeck")
+    target_compile_definitions(app PRIVATE AEGIS_ZEPHYR_HAS_TDECK_FAMILY=1)
+endif()
 
 target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/input_tca8418_keypad.c
@@ -113,10 +137,6 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_shell_input_backend.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_shell_display_adapter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_shell_input_adapter.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/zephyr_tdeck_board_providers.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/zephyr_tdeck_board_runtime.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/zephyr_tlora_pager_board_providers.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/zephyr_tlora_pager_board_runtime.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../core/aegis_core/aegis_core.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../core/app_registry/app_admission_policy.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../core/app_registry/app_catalog.cpp
@@ -168,6 +188,20 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../../shell/status/status_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../shell/status/notification_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_llext_adapter.cpp)
+
+if(AEGIS_ZEPHYR_BOARD_FAMILY STREQUAL "tlora_pager")
+    target_sources(app PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/boards/tlora_pager/tlora_pager_board_providers.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/boards/tlora_pager/tlora_pager_board_runtime.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/boards/tlora_pager/tlora_pager_shell_display_backend.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/boards/tlora_pager/tlora_pager_shell_input_backend.cpp)
+elseif(AEGIS_ZEPHYR_BOARD_FAMILY STREQUAL "tdeck")
+    target_sources(app PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/boards/tdeck/tdeck_board_providers.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/boards/tdeck/tdeck_board_runtime.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/boards/tdeck/tdeck_shell_display_backend.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/boards/tdeck/tdeck_shell_input_backend.cpp)
+endif()
 
 if(AEGIS_ZEPHYR_ENABLE_COMPILED_APP_FALLBACK)
     target_sources(app PRIVATE

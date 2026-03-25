@@ -26,7 +26,7 @@ It is a controlled runtime for constrained devices.
 The repository currently has one primary bring-up path that new contributors should follow:
 
 - Zephyr-based resident system bring-up
-- LilyGo T-LoRa Pager hardware adaptation path
+- LilyGo T-LoRa Pager and LilyGo T-Deck hardware adaptation paths
 - runtime-loaded native apps packaged into appfs
 - top-level build and flash entrypoint through [scripts/build_zephyr.py](./scripts/build_zephyr.py)
 
@@ -396,7 +396,13 @@ Aegis is a **governed MCU runtime with native apps**.
 /sdk         Headers and build support for Aegis apps
 /apps        Example or built-in development apps
 /docs        Architecture notes and design documents
+/ports       Platform ports, including Zephyr board-family adaptations
 ```
+
+For the active Zephyr hardware bring-up path, board-family code now lives under:
+
+- `ports/zephyr/boards/tlora_pager`
+- `ports/zephyr/boards/tdeck`
 
 ---
 

@@ -27,7 +27,6 @@ def main() -> int:
         "tdeck runtime complete devices=ready",
         "keyboard=ready",
         "touch=ready",
-        "battery=ready",
         "tdeck input backend trackball=ready keyboard=ready",
         "board package runtime ready package=zephyr_tdeck_sx1262",
         "interactive input enabled",

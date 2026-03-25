@@ -10,7 +10,7 @@
 #include "platform/logging/logger.hpp"
 #include "ports/zephyr/zephyr_board_backend_config.hpp"
 #include "ports/zephyr/zephyr_board_runtime.hpp"
-#include "ports/zephyr/zephyr_tlora_pager_board_providers.hpp"
+#include "ports/zephyr/boards/tlora_pager/tlora_pager_board_providers.hpp"
 
 struct device;
 

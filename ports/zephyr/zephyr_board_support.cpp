@@ -4,8 +4,12 @@
 
 #include "ports/zephyr/zephyr_board_descriptors.hpp"
 #include "ports/zephyr/zephyr_board_packages.hpp"
-#include "ports/zephyr/zephyr_tdeck_board_runtime.hpp"
-#include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
+#if defined(AEGIS_ZEPHYR_HAS_TDECK_FAMILY)
+#include "ports/zephyr/boards/tdeck/tdeck_board_runtime.hpp"
+#endif
+#if defined(AEGIS_ZEPHYR_HAS_TLORA_PAGER_FAMILY)
+#include "ports/zephyr/boards/tlora_pager/tlora_pager_board_runtime.hpp"
+#endif
 
 namespace aegis::ports::zephyr {
 
@@ -13,9 +17,17 @@ ZephyrBoardRuntime& runtime_for_package(std::string_view package_id, platform::L
     const auto& descriptor = descriptor_for_package(package_id);
     switch (descriptor.config.runtime_family) {
         case ZephyrBoardRuntimeFamily::TDeck:
+#if defined(AEGIS_ZEPHYR_HAS_TDECK_FAMILY)
             return tdeck_board_runtime(logger);
+#else
+            throw std::runtime_error("tdeck runtime not compiled into this Zephyr image");
+#endif
         case ZephyrBoardRuntimeFamily::TloraPager:
+#if defined(AEGIS_ZEPHYR_HAS_TLORA_PAGER_FAMILY)
             return tlora_pager_board_runtime(logger);
+#else
+            throw std::runtime_error("tlora pager runtime not compiled into this Zephyr image");
+#endif
         case ZephyrBoardRuntimeFamily::Generic:
         default:
             return generic_zephyr_board_runtime(package_id);

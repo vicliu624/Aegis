@@ -1,4 +1,4 @@
-#include "ports/zephyr/zephyr_tdeck_board_runtime.hpp"
+#include "ports/zephyr/boards/tdeck/tdeck_board_runtime.hpp"
 
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
@@ -151,7 +151,7 @@ bool ZephyrTdeckBoardRuntime::acquire_devices() {
     i2c_device_ = DEVICE_DT_GET(DT_NODELABEL(i2c0));
 #endif
 #if DT_NODE_EXISTS(DT_NODELABEL(adc0))
-    adc_device_ = DEVICE_DT_GET(DT_NODELABEL(adc0));
+    adc_device_ = device_get_binding(DEVICE_DT_NAME(DT_NODELABEL(adc0)));
 #endif
     transfer_coordinator_.bind_gpio_device(gpio_device_);
     board_control_provider_.bind_gpio_device(gpio_device_);

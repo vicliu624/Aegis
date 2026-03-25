@@ -1,4 +1,4 @@
-#include "ports/zephyr/zephyr_tlora_pager_board_providers.hpp"
+#include "ports/zephyr/boards/tlora_pager/tlora_pager_board_providers.hpp"
 
 #include <array>
 #include <cerrno>
