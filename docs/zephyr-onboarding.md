@@ -132,6 +132,7 @@ Linux should work well with the same build driver as long as:
 - Python, CMake, Ninja, and `west` are installed
 - the Zephyr SDK/toolchain is installed and visible
 - `esptool` is installed
+- `python3 -m pip` works if you want the helper to auto-install `littlefs-python`
 - `mklittlefs` is installed if your flow requires it
 
 ### macOS
@@ -141,6 +142,7 @@ macOS follows the same pattern as Linux:
 - Python, CMake, Ninja, and `west`
 - Zephyr SDK/toolchain
 - `esptool`
+- working `pip` in the Python environment if you want the helper to auto-install `littlefs-python`
 - `mklittlefs` if needed
 
 The repository build script itself does not assume PowerShell, batch files, or shell-specific command
@@ -194,6 +196,15 @@ Verify:
 ```bash
 west --version
 python -m esptool version
+```
+
+On Linux, macOS, or WSL, also make sure your Python environment actually includes `pip`.
+Some minimal distro Python installs do not.
+
+Verify:
+
+```bash
+python3 -m pip --version
 ```
 
 ---
@@ -334,6 +345,8 @@ is importable:
 python -c "import littlefs"
 ```
 
+If that import is missing and your Linux/WSL Python also lacks `pip`, install `python3-pip` first.
+
 ---
 
 ## 11. First repository verification steps
@@ -444,6 +457,16 @@ python -m pip install esptool
 
 Install it on the host, let the helper fall back to `littlefs-python`, or provide the tool through the appfs helper path described in
 [building-zephyr.md](./building-zephyr.md).
+
+### The Python appfs fallback cannot auto-install `littlefs-python`
+
+Check:
+
+- `python3 -m pip --version`
+- whether the current Python includes `pip`
+- whether the tool cache directory is writable
+
+On minimal Linux or WSL environments, the missing piece is often simply `python3-pip`.
 
 ---
 

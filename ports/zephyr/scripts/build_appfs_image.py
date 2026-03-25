@@ -191,7 +191,22 @@ def install_littlefs_python(cache_dir: pathlib.Path) -> pathlib.Path:
         str(target_dir),
         "littlefs-python",
     ]
-    subprocess.run(command, check=True, capture_output=True, text=True)
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        details = (exc.stderr or exc.stdout or "").strip()
+        message = (
+            "failed to install littlefs-python into the tool cache. "
+            "Ensure this Python environment has pip available"
+        )
+        if "No module named pip" in details:
+            message += (
+                " (for example install python3-pip on Linux/WSL, or use a Python distribution "
+                "that includes pip)"
+            )
+        if details:
+            message += f". pip output:\n{details}"
+        raise RuntimeError(message) from exc
     if not module_dir.exists():
         raise RuntimeError("littlefs-python installation completed but module was not found")
     return target_dir
