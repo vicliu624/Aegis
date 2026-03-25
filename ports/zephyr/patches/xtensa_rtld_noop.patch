@@ -1,0 +1,18 @@
+--- a/arch/xtensa/core/elf.c
++++ b/arch/xtensa/core/elf.c
+@@
+ 	case R_XTENSA_32:
+ 		/* Used for both LOCAL and GLOBAL bindings */
+ 		*got_entry += addr;
+ 		break;
++	case R_XTENSA_RTLD:
++		/*
++		 * These entries are emitted in shared Xtensa objects alongside
++		 * the PLT veneer and do not require an additional relocation
++		 * write at load time here. Treat them as an intentional no-op
++		 * instead of reporting them as unsupported.
++		 */
++		break;
+ 	case R_XTENSA_SLOT0_OP:
+ 		/* Apparently only actionable with LOCAL bindings */
+ 		;

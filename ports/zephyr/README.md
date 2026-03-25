@@ -21,6 +21,7 @@ Current status:
 - The T-LoRa-Pager overlay now reclaims the real 8MB flash space instead of stopping at the inherited 4MB partition profile, so `storage_partition` can hold a real multi-app `appfs.bin`.
 - A formal `aegis_zephyr_flash_appfs` target now exists. It writes the generated `appfs.bin` directly to the resolved `storage_partition` offset through `esptool`, with the serial port supplied through `AEGIS_ZEPHYR_FLASH_PORT`.
 - The Zephyr entrypoint now verifies the local Xtensa `R_XTENSA_RTLD` LLEXT no-op patch against the active `ZEPHYR_BASE` during configure, and by default auto-applies it so Pager bring-up does not silently depend on an untracked manual edit under `C:\\ProgramData\\zephyrproject\\zephyr`.
+- That helper is intentionally version-gated to the Zephyr source layout validated during bring-up, so an upstream Zephyr upgrade fails loudly until the patch path is re-checked instead of silently mutating an unknown loader implementation.
 
 Expected next steps:
 
@@ -45,7 +46,8 @@ Local Zephyr patch behavior:
 - configure will verify the required Xtensa loader patch inside the active `ZEPHYR_BASE`
 - by default Aegis auto-applies the patch if it is missing
 - set `-DAEGIS_ZEPHYR_AUTO_APPLY_LOCAL_PATCHES=OFF` if you want configure to fail instead of mutating the local Zephyr tree
-- the helper logic lives in [ensure_xtensa_rtld_patch.py](C:/Users/VicLi/Documents/Projects/aegis/ports/zephyr/scripts/ensure_xtensa_rtld_patch.py) and the tracked rationale lives in [README.md](C:/Users/VicLi/Documents/Projects/aegis/ports/zephyr/patches/README.md)
+- the helper is version-gated by default; use `-DAEGIS_ZEPHYR_ALLOW_UNSUPPORTED_LOCAL_PATCH_VERSION=ON` only after re-validating the upstream Xtensa loader layout
+- the helper logic lives in [ensure_xtensa_rtld_patch.py](C:/Users/VicLi/Documents/Projects/aegis/ports/zephyr/scripts/ensure_xtensa_rtld_patch.py), the tracked rationale lives in [README.md](C:/Users/VicLi/Documents/Projects/aegis/ports/zephyr/patches/README.md), and the expected source delta is mirrored in [xtensa_rtld_noop.patch](C:/Users/VicLi/Documents/Projects/aegis/ports/zephyr/patches/xtensa_rtld_noop.patch)
 
 Current appfs workflow:
 

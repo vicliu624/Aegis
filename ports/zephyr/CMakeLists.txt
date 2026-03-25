@@ -4,6 +4,8 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 option(AEGIS_ZEPHYR_AUTO_APPLY_LOCAL_PATCHES
     "Automatically apply required local source patches to the active Zephyr tree during configure." ON)
+option(AEGIS_ZEPHYR_ALLOW_UNSUPPORTED_LOCAL_PATCH_VERSION
+    "Allow local Zephyr patch helpers to run against an unvalidated Zephyr version." OFF)
 
 if(NOT DEFINED ENV{ZEPHYR_BASE} OR "$ENV{ZEPHYR_BASE}" STREQUAL "")
     message(FATAL_ERROR "ZEPHYR_BASE must be set before configuring the Zephyr target")
@@ -16,11 +18,17 @@ if(AEGIS_ZEPHYR_AUTO_APPLY_LOCAL_PATCHES)
     set(AEGIS_ZEPHYR_LOCAL_PATCH_MODE "apply")
 endif()
 
+set(AEGIS_ZEPHYR_LOCAL_PATCH_EXTRA_ARGS "")
+if(AEGIS_ZEPHYR_ALLOW_UNSUPPORTED_LOCAL_PATCH_VERSION)
+    list(APPEND AEGIS_ZEPHYR_LOCAL_PATCH_EXTRA_ARGS --allow-unsupported-version)
+endif()
+
 execute_process(
     COMMAND ${Python3_EXECUTABLE}
         "${AEGIS_ZEPHYR_LOCAL_PATCH_HELPER}"
         --zephyr-base "$ENV{ZEPHYR_BASE}"
         --mode "${AEGIS_ZEPHYR_LOCAL_PATCH_MODE}"
+        ${AEGIS_ZEPHYR_LOCAL_PATCH_EXTRA_ARGS}
     RESULT_VARIABLE AEGIS_ZEPHYR_LOCAL_PATCH_RC
     OUTPUT_VARIABLE AEGIS_ZEPHYR_LOCAL_PATCH_STDOUT
     ERROR_VARIABLE AEGIS_ZEPHYR_LOCAL_PATCH_STDERR

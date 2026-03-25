@@ -9,5 +9,11 @@ Current patch set:
   Aegis requires the local Xtensa loader path to treat `R_XTENSA_RTLD` as an intentional no-op for
   the current writable-buffer LLEXT bring-up flow on ESP32-S3.
 
+Validated against:
+
+- Zephyr `4.3.0`
+- target file: `arch/xtensa/core/elf.c`
+- expected source delta: [xtensa_rtld_noop.patch](C:/Users/VicLi/Documents/Projects/aegis/ports/zephyr/patches/xtensa_rtld_noop.patch)
+
 The repository does not vendor Zephyr itself, so these adjustments are applied through helper scripts
 at configure time and verified as part of the Zephyr build entrypoint.

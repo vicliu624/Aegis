@@ -5,6 +5,8 @@ import argparse
 import pathlib
 import sys
 
+SUPPORTED_VERSION = (4, 3, 0)
+VERSION_FILE_NAME = "VERSION"
 
 PATCH_ANCHOR = """\tcase R_XTENSA_32:
 \t\t/* Used for both LOCAL and GLOBAL bindings */
@@ -42,13 +44,61 @@ def parse_args() -> argparse.Namespace:
         default="check",
         help="Only verify the patch or apply it if missing.",
     )
+    parser.add_argument(
+        "--allow-unsupported-version",
+        action="store_true",
+        help="Permit check/apply against a Zephyr version other than the validated one.",
+    )
     return parser.parse_args()
+
+
+def parse_version(zephyr_base: pathlib.Path) -> tuple[int, int, int]:
+    version_file = zephyr_base / VERSION_FILE_NAME
+    if not version_file.exists():
+        raise FileNotFoundError(version_file)
+
+    values: dict[str, int] = {}
+    for raw_line in version_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = (part.strip() for part in line.split("=", 1))
+        if key in {"VERSION_MAJOR", "VERSION_MINOR", "PATCHLEVEL"}:
+            values[key] = int(value or "0")
+
+    return (
+        values.get("VERSION_MAJOR", -1),
+        values.get("VERSION_MINOR", -1),
+        values.get("PATCHLEVEL", -1),
+    )
+
+
+def format_version(version: tuple[int, int, int]) -> str:
+    return ".".join(str(part) for part in version)
 
 
 def main() -> int:
     args = parse_args()
     zephyr_base = pathlib.Path(args.zephyr_base)
     target = zephyr_base / "arch" / "xtensa" / "core" / "elf.c"
+
+    try:
+        version = parse_version(zephyr_base)
+    except FileNotFoundError as exc:
+        print(f"[aegis] zephyr version file not found: {exc}", file=sys.stderr)
+        return 4
+    except ValueError as exc:
+        print(f"[aegis] unable to parse zephyr version: {exc}", file=sys.stderr)
+        return 5
+
+    if version != SUPPORTED_VERSION and not args.allow_unsupported_version:
+        print(
+            "[aegis] xtensa RTLD patch helper is only validated against Zephyr "
+            f"{format_version(SUPPORTED_VERSION)}, but found {format_version(version)} in {zephyr_base}. "
+            "Re-run with --allow-unsupported-version only after re-validating the loader source layout.",
+            file=sys.stderr,
+        )
+        return 6
 
     if not target.exists():
         print(f"[aegis] xtensa patch target not found: {target}", file=sys.stderr)
@@ -57,7 +107,10 @@ def main() -> int:
     original = target.read_text(encoding="utf-8")
 
     if PATCH_SENTINEL in original:
-        print(f"[aegis] xtensa RTLD patch already present in {target}")
+        print(
+            "[aegis] xtensa RTLD patch already present in "
+            f"{target} for Zephyr {format_version(version)}"
+        )
         return 0
 
     if PATCH_ANCHOR not in original:
@@ -78,7 +131,10 @@ def main() -> int:
 
     updated = original.replace(PATCH_ANCHOR, PATCH_REPLACEMENT, 1)
     target.write_text(updated, encoding="utf-8")
-    print(f"[aegis] applied xtensa RTLD no-op patch to {target}")
+    print(
+        "[aegis] applied xtensa RTLD no-op patch to "
+        f"{target} for Zephyr {format_version(version)}"
+    )
     return 0
 
 
