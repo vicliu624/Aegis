@@ -1,0 +1,160 @@
+#include "ports/zephyr/zephyr_board_runtime.hpp"
+
+#include <cerrno>
+#include <stdexcept>
+
+namespace aegis::ports::zephyr {
+
+namespace {
+
+ZephyrBoardRuntime* g_active_runtime = nullptr;
+
+ZephyrBoardBackendConfig config_for_package(std::string_view package_id) {
+    if (package_id == "zephyr_device_a") {
+        return make_device_a_backend_config();
+    }
+    if (package_id == "zephyr_device_b") {
+        return make_device_b_backend_config();
+    }
+    if (package_id == "zephyr_tlora_pager_sx1262") {
+        return make_tlora_pager_sx1262_backend_config();
+    }
+    return ZephyrBoardBackendConfig {
+        .backend_id = std::string(package_id),
+        .target_board = "unknown",
+        .profile_device_id = std::string(package_id),
+        .board_family = "generic-zephyr",
+    };
+}
+
+}  // namespace
+
+bool ZephyrBoardRuntime::expander_ready() const {
+    return false;
+}
+
+bool ZephyrBoardRuntime::shared_spi_ready() const {
+    return false;
+}
+
+std::string ZephyrBoardRuntime::shared_spi_owner_name() const {
+    return "unknown";
+}
+
+bool ZephyrBoardRuntime::keyboard_ready() const {
+    return false;
+}
+
+bool ZephyrBoardRuntime::radio_ready() const {
+    return ready();
+}
+
+bool ZephyrBoardRuntime::gps_ready() const {
+    return ready();
+}
+
+bool ZephyrBoardRuntime::nfc_ready() const {
+    return ready();
+}
+
+bool ZephyrBoardRuntime::storage_ready() const {
+    return ready();
+}
+
+bool ZephyrBoardRuntime::audio_ready() const {
+    return ready();
+}
+
+bool ZephyrBoardRuntime::hostlink_ready() const {
+    return ready();
+}
+
+bool ZephyrBoardRuntime::sd_card_present() const {
+    return storage_ready();
+}
+
+bool ZephyrBoardRuntime::board_direct_input_mode() const {
+    return false;
+}
+
+bool ZephyrBoardRuntime::keyboard_irq_asserted() const {
+    return false;
+}
+
+bool ZephyrBoardRuntime::keyboard_pending_event_count(uint8_t& pending) const {
+    pending = 0;
+    return false;
+}
+
+bool ZephyrBoardRuntime::keyboard_read_event(uint8_t& raw_event) const {
+    raw_event = 0;
+    return false;
+}
+
+int ZephyrBoardRuntime::with_display_spi_client(k_timeout_t timeout,
+                                                std::string_view operation,
+                                                const std::function<int()>& action) const {
+    (void)timeout;
+    (void)operation;
+    if (action == nullptr) {
+        return -EINVAL;
+    }
+    return action();
+}
+
+ZephyrGenericBoardRuntime::ZephyrGenericBoardRuntime(ZephyrBoardBackendConfig config)
+    : config_(std::move(config)) {}
+
+const ZephyrBoardBackendConfig& ZephyrGenericBoardRuntime::config() const {
+    return config_;
+}
+
+bool ZephyrGenericBoardRuntime::initialize() {
+    initialized_ = true;
+    return true;
+}
+
+bool ZephyrGenericBoardRuntime::ready() const {
+    return initialized_;
+}
+
+void ZephyrGenericBoardRuntime::log_state(std::string_view stage) const {
+    (void)stage;
+}
+
+void ZephyrGenericBoardRuntime::signal_boot_stage(int stage) const {
+    (void)stage;
+}
+
+void ZephyrGenericBoardRuntime::heartbeat_pulse() const {}
+
+ZephyrBoardRuntime& generic_zephyr_board_runtime(std::string_view package_id) {
+    static ZephyrGenericBoardRuntime device_a_runtime(config_for_package("zephyr_device_a"));
+    static ZephyrGenericBoardRuntime device_b_runtime(config_for_package("zephyr_device_b"));
+    static ZephyrGenericBoardRuntime fallback_runtime(config_for_package("zephyr_generic"));
+
+    if (package_id == "zephyr_device_a") {
+        return device_a_runtime;
+    }
+    if (package_id == "zephyr_device_b") {
+        return device_b_runtime;
+    }
+    return fallback_runtime;
+}
+
+void set_active_zephyr_board_runtime(ZephyrBoardRuntime* runtime) {
+    g_active_runtime = runtime;
+}
+
+ZephyrBoardRuntime* try_active_zephyr_board_runtime() {
+    return g_active_runtime;
+}
+
+ZephyrBoardRuntime& require_active_zephyr_board_runtime() {
+    if (g_active_runtime == nullptr) {
+        throw std::runtime_error("active Zephyr board runtime is not bound");
+    }
+    return *g_active_runtime;
+}
+
+}  // namespace aegis::ports::zephyr

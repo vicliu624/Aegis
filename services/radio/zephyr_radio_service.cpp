@@ -2,7 +2,7 @@
 
 #include <zephyr/device.h>
 
-#include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
+#include "ports/zephyr/zephyr_board_runtime.hpp"
 
 namespace aegis::services {
 
@@ -13,26 +13,21 @@ bool ZephyrRadioService::available() const {
     if (!zephyr_device_ready()) {
         return false;
     }
-    if (config_.board_family == "lilygo_tlora_pager") {
-        if (const auto* runtime = ports::zephyr::try_tlora_pager_board_runtime(); runtime != nullptr) {
-            return runtime->radio_ready();
-        }
+    if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
+        runtime->config().backend_id == config_.backend_id) {
+        return runtime->radio_ready();
     }
     return true;
 }
 
 std::string ZephyrRadioService::backend_name() const {
-    if (config_.board_family == "lilygo_tlora_pager") {
-        if (const auto* runtime = ports::zephyr::try_tlora_pager_board_runtime(); runtime != nullptr) {
-            return std::string("zephyr-pager-radio:device=") + config_.radio_device_name +
-                   ",power=" + (runtime->radio_ready() ? "ready" : "gated") +
-                   ",shared-spi=" + (runtime->shared_spi_ready() ? "ready" : "missing") +
-                   ",owner=" + (runtime->shared_spi_owner() ==
-                                        ports::zephyr::ZephyrTloraPagerBoardRuntime::SharedSpiClient::Radio
-                                    ? "radio"
-                                    : "other") +
-                   ",expander=" + (runtime->expander_ready() ? "ready" : "missing");
-        }
+    if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
+        runtime->config().backend_id == config_.backend_id) {
+        return std::string("zephyr-board-radio:device=") + config_.radio_device_name +
+               ",power=" + (runtime->radio_ready() ? "ready" : "gated") +
+               ",shared-spi=" + (runtime->shared_spi_ready() ? "ready" : "missing") +
+               ",owner=" + runtime->shared_spi_owner_name() +
+               ",expander=" + (runtime->expander_ready() ? "ready" : "missing");
     }
     return available() ? "zephyr-device:" + config_.radio_device_name
                        : "zephyr-device-absent:" + config_.radio_device_name;

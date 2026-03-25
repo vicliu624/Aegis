@@ -2,7 +2,7 @@
 
 #include <zephyr/device.h>
 
-#include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
+#include "ports/zephyr/zephyr_board_runtime.hpp"
 
 namespace aegis::services {
 
@@ -13,10 +13,9 @@ bool ZephyrHostlinkService::available() const {
     if (!zephyr_device_ready()) {
         return false;
     }
-    if (config_.board_family == "lilygo_tlora_pager") {
-        if (const auto* runtime = ports::zephyr::try_tlora_pager_board_runtime(); runtime != nullptr) {
-            return runtime->hostlink_ready();
-        }
+    if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
+        runtime->config().backend_id == config_.backend_id) {
+        return runtime->hostlink_ready();
     }
     return true;
 }
@@ -26,10 +25,9 @@ bool ZephyrHostlinkService::connected() const {
 }
 
 std::string ZephyrHostlinkService::transport_name() const {
-    if (config_.board_family == "lilygo_tlora_pager") {
-        if (const auto* runtime = ports::zephyr::try_tlora_pager_board_runtime(); runtime != nullptr) {
-            return runtime->hostlink_ready() ? config_.hostlink_device_name : "hostlink-gated";
-        }
+    if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
+        runtime->config().backend_id == config_.backend_id) {
+        return runtime->hostlink_ready() ? config_.hostlink_device_name : "hostlink-gated";
     }
     return available() ? config_.hostlink_device_name : "hostlink-unavailable";
 }

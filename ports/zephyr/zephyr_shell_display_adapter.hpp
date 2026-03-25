@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <memory>
 #include <string_view>
 #include <string>
 #include <string>
@@ -14,13 +15,17 @@
 
 #include "platform/logging/logger.hpp"
 #include "ports/zephyr/zephyr_board_backend_config.hpp"
+#include "ports/zephyr/zephyr_board_runtime.hpp"
+#include "ports/zephyr/zephyr_shell_display_backend.hpp"
 #include "shell/presentation/shell_presentation_sink.hpp"
 
 namespace aegis::ports::zephyr {
 
 class ZephyrShellDisplayAdapter : public shell::ShellPresentationSink {
 public:
-    ZephyrShellDisplayAdapter(platform::Logger& logger, ZephyrBoardBackendConfig config);
+    ZephyrShellDisplayAdapter(platform::Logger& logger,
+                              ZephyrBoardRuntime& runtime,
+                              ZephyrBoardBackendConfig config);
 
     [[nodiscard]] bool initialize();
     void present(const shell::ShellPresentationFrame& frame) override;
@@ -127,7 +132,9 @@ private:
     void blit_scratch() const;
 
     platform::Logger& logger_;
+    ZephyrBoardRuntime& runtime_;
     ZephyrBoardBackendConfig config_;
+    std::unique_ptr<IZephyrShellDisplayBackend> display_backend_;
     BackendKind backend_ {BackendKind::None};
     const struct device* display_device_ {nullptr};
     const struct device* raw_mipi_device_ {nullptr};

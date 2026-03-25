@@ -2,7 +2,7 @@
 
 #include <zephyr/device.h>
 
-#include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
+#include "ports/zephyr/zephyr_board_runtime.hpp"
 
 namespace aegis::services {
 
@@ -13,21 +13,19 @@ bool ZephyrGpsService::available() const {
     if (!zephyr_device_ready()) {
         return false;
     }
-    if (config_.board_family == "lilygo_tlora_pager") {
-        if (const auto* runtime = ports::zephyr::try_tlora_pager_board_runtime(); runtime != nullptr) {
-            return runtime->gps_ready();
-        }
+    if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
+        runtime->config().backend_id == config_.backend_id) {
+        return runtime->gps_ready();
     }
     return true;
 }
 
 std::string ZephyrGpsService::backend_name() const {
-    if (config_.board_family == "lilygo_tlora_pager") {
-        if (const auto* runtime = ports::zephyr::try_tlora_pager_board_runtime(); runtime != nullptr) {
-            return std::string("zephyr-pager-gps:device=") + config_.gps_device_name +
-                   ",power=" + (runtime->gps_ready() ? "ready" : "gated") +
-                   ",expander=" + (runtime->expander_ready() ? "ready" : "missing");
-        }
+    if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
+        runtime->config().backend_id == config_.backend_id) {
+        return std::string("zephyr-board-gps:device=") + config_.gps_device_name +
+               ",power=" + (runtime->gps_ready() ? "ready" : "gated") +
+               ",expander=" + (runtime->expander_ready() ? "ready" : "missing");
     }
     return available() ? "zephyr-device:" + config_.gps_device_name
                        : "zephyr-device-absent:" + config_.gps_device_name;

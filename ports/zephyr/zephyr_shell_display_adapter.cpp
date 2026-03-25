@@ -17,7 +17,6 @@
 #include <zephyr/sys/printk.h>
 
 #include "ports/zephyr/zephyr_gpio_pin.hpp"
-#include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
 
 namespace aegis::ports::zephyr {
 
@@ -210,54 +209,27 @@ mipi_dbi_config make_raw_mipi_config() {
 }  // namespace
 
 ZephyrShellDisplayAdapter::ZephyrShellDisplayAdapter(platform::Logger& logger,
+                                                     ZephyrBoardRuntime& runtime,
                                                      ZephyrBoardBackendConfig config)
-    : logger_(logger), config_(std::move(config)) {
+    : logger_(logger),
+      runtime_(runtime),
+      config_(std::move(config)),
+      display_backend_(make_zephyr_shell_display_backend(logger_, runtime_, config_)) {
     k_mutex_init(&boot_log_mutex_);
 }
 
 bool ZephyrShellDisplayAdapter::initialize() {
-    if (config_.display_prefer_manual_spi && initialize_manual_spi_st7796_backend()) {
-        if (config_.display_smoke_test) {
-            run_smoke_test();
-        }
-        fill_display(color_for(shell::ShellSurface::Home));
-        return true;
+    if (display_backend_ == nullptr || !display_backend_->initialize()) {
+        logger_.info("display", "display backend unavailable");
+        return false;
     }
 
-    if (config_.display_prefer_raw_mipi && initialize_raw_st7796_backend()) {
-        if (config_.display_smoke_test) {
-            run_smoke_test();
-        }
-        fill_display(color_for(shell::ShellSurface::Home));
-        return true;
+    backend_ = BackendKind::DisplayApi;
+    if (config_.display_smoke_test) {
+        run_smoke_test();
     }
-
-    if (initialize_display_api_backend()) {
-        if (config_.display_smoke_test) {
-            run_smoke_test();
-        }
-        fill_display(color_for(shell::ShellSurface::Home));
-        return true;
-    }
-
-    if (!config_.display_prefer_manual_spi && initialize_manual_spi_st7796_backend()) {
-        if (config_.display_smoke_test) {
-            run_smoke_test();
-        }
-        fill_display(color_for(shell::ShellSurface::Home));
-        return true;
-    }
-
-    if (!config_.display_prefer_raw_mipi && initialize_raw_st7796_backend()) {
-        if (config_.display_smoke_test) {
-            run_smoke_test();
-        }
-        fill_display(color_for(shell::ShellSurface::Home));
-        return true;
-    }
-
-    logger_.info("display", "display backend unavailable");
-    return false;
+    fill_display(color_for(shell::ShellSurface::Home));
+    return true;
 }
 
 bool ZephyrShellDisplayAdapter::initialize_manual_spi_st7796_backend() {
@@ -1102,31 +1074,8 @@ void ZephyrShellDisplayAdapter::write_region(int x,
     if (width <= 0 || height <= 0) {
         return;
     }
-
-    if (backend_ == BackendKind::DisplayApi) {
-        const auto* device = display_device_ != nullptr ? display_device_ : find_device(config_.display_device_name);
-        if (device == nullptr || !device_is_ready(device)) {
-            return;
-        }
-
-        display_buffer_descriptor desc {
-            .buf_size = static_cast<uint32_t>(pixels.size() * sizeof(uint16_t)),
-            .width = static_cast<uint16_t>(width),
-            .height = static_cast<uint16_t>(height),
-            .pitch = static_cast<uint16_t>(width),
-            .frame_incomplete = false,
-        };
-        display_write(device, x, y, &desc, pixels.data());
-        return;
-    }
-
-    if (backend_ == BackendKind::ManualSpi) {
-        (void)manual_write_pixels(x, y, width, height, pixels);
-        return;
-    }
-
-    if (backend_ == BackendKind::RawMipiDbi) {
-        (void)raw_write_pixels(x, y, width, height, pixels);
+    if (display_backend_ != nullptr) {
+        display_backend_->write_region(x, y, width, height, pixels);
     }
 }
 
@@ -1146,10 +1095,8 @@ int ZephyrShellDisplayAdapter::manual_send_command(uint8_t cmd) const {
 int ZephyrShellDisplayAdapter::manual_send_command(uint8_t cmd,
                                                    const uint8_t* data,
                                                    std::size_t len) const {
-    auto& pager_runtime = tlora_pager_board_runtime(logger_);
-    if (pager_runtime.ready()) {
-        return pager_runtime.with_shared_spi_client(
-            ZephyrTloraPagerBoardRuntime::SharedSpiClient::Display,
+    if (runtime_.ready()) {
+        return runtime_.with_display_spi_client(
             K_MSEC(50),
             "display.manual_send_command",
             [&]() { return manual_send_command_unlocked(cmd, data, len); });
@@ -1194,10 +1141,8 @@ int ZephyrShellDisplayAdapter::manual_send_command_unlocked(uint8_t cmd,
 }
 
 int ZephyrShellDisplayAdapter::manual_send_data(const uint8_t* data, std::size_t len) const {
-    auto& pager_runtime = tlora_pager_board_runtime(logger_);
-    if (pager_runtime.ready()) {
-        return pager_runtime.with_shared_spi_client(
-            ZephyrTloraPagerBoardRuntime::SharedSpiClient::Display,
+    if (runtime_.ready()) {
+        return runtime_.with_display_spi_client(
             K_MSEC(50),
             "display.manual_send_data",
             [&]() { return manual_send_data_unlocked(data, len); });
@@ -1231,10 +1176,8 @@ int ZephyrShellDisplayAdapter::manual_send_data_unlocked(const uint8_t* data, st
 }
 
 int ZephyrShellDisplayAdapter::manual_read_command(uint8_t cmd, uint8_t* data, std::size_t len) const {
-    auto& pager_runtime = tlora_pager_board_runtime(logger_);
-    if (pager_runtime.ready()) {
-        return pager_runtime.with_shared_spi_client(
-            ZephyrTloraPagerBoardRuntime::SharedSpiClient::Display,
+    if (runtime_.ready()) {
+        return runtime_.with_display_spi_client(
             K_MSEC(50),
             "display.manual_read_command",
             [&]() { return manual_read_command_unlocked(cmd, data, len); });
@@ -1365,10 +1308,8 @@ int ZephyrShellDisplayAdapter::manual_write_pixels(int x,
                                                    int width,
                                                    int height,
                                                    const std::vector<uint16_t>& pixels) const {
-    auto& pager_runtime = tlora_pager_board_runtime(logger_);
-    if (pager_runtime.ready()) {
-        return pager_runtime.with_shared_spi_client(
-            ZephyrTloraPagerBoardRuntime::SharedSpiClient::Display,
+    if (runtime_.ready()) {
+        return runtime_.with_display_spi_client(
             K_MSEC(50),
             "display.manual_write_pixels",
             [&]() { return manual_write_pixels_unlocked(x, y, width, height, pixels); });
@@ -1490,10 +1431,8 @@ int ZephyrShellDisplayAdapter::raw_write_pixels(int x,
                                                 int width,
                                                 int height,
                                                 const std::vector<uint16_t>& pixels) const {
-    auto& pager_runtime = tlora_pager_board_runtime(logger_);
-    if (pager_runtime.ready()) {
-        return pager_runtime.with_shared_spi_client(
-            ZephyrTloraPagerBoardRuntime::SharedSpiClient::Display,
+    if (runtime_.ready()) {
+        return runtime_.with_display_spi_client(
             K_MSEC(50),
             "display.raw_write_pixels",
             [&]() { return raw_write_pixels_unlocked(x, y, width, height, pixels); });
@@ -1539,10 +1478,8 @@ int ZephyrShellDisplayAdapter::raw_write_pixels_unlocked(int x,
 int ZephyrShellDisplayAdapter::raw_send_command(uint8_t cmd,
                                                 const uint8_t* data,
                                                 std::size_t len) const {
-    auto& pager_runtime = tlora_pager_board_runtime(logger_);
-    if (pager_runtime.ready()) {
-        return pager_runtime.with_shared_spi_client(
-            ZephyrTloraPagerBoardRuntime::SharedSpiClient::Display,
+    if (runtime_.ready()) {
+        return runtime_.with_display_spi_client(
             K_MSEC(50),
             "display.raw_send_command",
             [&]() { return raw_send_command_unlocked(cmd, data, len); });

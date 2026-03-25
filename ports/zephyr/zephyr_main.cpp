@@ -12,6 +12,7 @@
 #include "ports/zephyr/zephyr_app_package_source.hpp"
 #include "ports/zephyr/zephyr_appfs.hpp"
 #include "ports/zephyr/zephyr_board_backend_config.hpp"
+#include "ports/zephyr/zephyr_board_support.hpp"
 #include "ports/zephyr/zephyr_board_packages.hpp"
 #include "ports/zephyr/zephyr_boot_log_logger.hpp"
 #include "ports/zephyr/zephyr_build_config.hpp"
@@ -19,12 +20,9 @@
 #include "ports/zephyr/zephyr_logger.hpp"
 #include "ports/zephyr/zephyr_shell_display_adapter.hpp"
 #include "ports/zephyr/zephyr_shell_input_adapter.hpp"
-#include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
 #include "runtime/loader/llext_loader_backend.hpp"
 
 namespace aegis::ports::zephyr {
-
-constexpr char kBootstrapDevicePackage[] = "zephyr_tlora_pager_sx1262";
 
 void run_shell_presentation_selftest(aegis::core::AegisCore& core, aegis::platform::Logger& logger) {
     const std::vector<aegis::shell::ShellNavigationAction> script {
@@ -100,16 +98,26 @@ extern "C" int main(void) {
     esp_rom_printf("AEGIS ROM: loader backend ready\n");
     printk("AEGIS TRACE: loader backend ready\n");
 
-    const auto board_config = aegis::ports::zephyr::make_tlora_pager_sx1262_backend_config();
+    const auto board_support =
+        aegis::ports::zephyr::resolve_zephyr_board_support(aegis::ports::zephyr::kBootstrapDevicePackage,
+                                                           boot_logger);
+    auto& board_runtime = *board_support.runtime;
+    aegis::ports::zephyr::set_active_zephyr_board_runtime(&board_runtime);
+    const auto board_config = board_runtime.config();
     esp_rom_printf("AEGIS ROM: board config ready\n");
     printk("AEGIS TRACE: board config ready\n");
-    auto& board_runtime = aegis::ports::zephyr::tlora_pager_board_runtime(boot_logger);
-    const bool board_runtime_ready = aegis::ports::zephyr::bootstrap_tlora_pager_board_runtime(boot_logger);
+    const bool board_runtime_ready =
+        aegis::ports::zephyr::initialize_board_runtime(aegis::ports::zephyr::kBootstrapDevicePackage,
+                                                       boot_logger);
     board_runtime.log_state("pre-display");
     board_runtime.signal_boot_stage(1);
     printk("AEGIS TRACE: stage 1\n");
-    aegis::ports::zephyr::ZephyrShellDisplayAdapter display_adapter(boot_logger, board_config);
-    aegis::ports::zephyr::ZephyrShellInputAdapter input_adapter(boot_logger, board_config);
+    aegis::ports::zephyr::ZephyrShellDisplayAdapter display_adapter(boot_logger,
+                                                                    board_runtime,
+                                                                    board_config);
+    aegis::ports::zephyr::ZephyrShellInputAdapter input_adapter(boot_logger,
+                                                                board_runtime,
+                                                                board_config);
     boot_logger.attach_display(&display_adapter);
     printk("AEGIS TRACE: input adapter constructed\n");
 

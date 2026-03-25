@@ -2,7 +2,7 @@
 
 #include <zephyr/device.h>
 
-#include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
+#include "ports/zephyr/zephyr_board_runtime.hpp"
 
 namespace aegis::services {
 
@@ -13,10 +13,9 @@ bool ZephyrAudioService::output_available() const {
     if (!ready(config_.audio_output_device_name)) {
         return false;
     }
-    if (config_.board_family == "lilygo_tlora_pager") {
-        if (const auto* runtime = ports::zephyr::try_tlora_pager_board_runtime(); runtime != nullptr) {
-            return runtime->audio_ready();
-        }
+    if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
+        runtime->config().backend_id == config_.backend_id) {
+        return runtime->audio_ready();
     }
     return true;
 }
@@ -25,22 +24,20 @@ bool ZephyrAudioService::input_available() const {
     if (!ready(config_.audio_input_device_name)) {
         return false;
     }
-    if (config_.board_family == "lilygo_tlora_pager") {
-        if (const auto* runtime = ports::zephyr::try_tlora_pager_board_runtime(); runtime != nullptr) {
-            return runtime->audio_ready();
-        }
+    if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
+        runtime->config().backend_id == config_.backend_id) {
+        return runtime->audio_ready();
     }
     return true;
 }
 
 std::string ZephyrAudioService::backend_name() const {
-    if (config_.board_family == "lilygo_tlora_pager") {
-        if (const auto* runtime = ports::zephyr::try_tlora_pager_board_runtime(); runtime != nullptr) {
-            return std::string("zephyr-pager-audio:out=") + config_.audio_output_device_name +
-                   ",in=" + config_.audio_input_device_name +
-                   ",amp=" + (runtime->audio_ready() ? "ready" : "gated") +
-                   ",expander=" + (runtime->expander_ready() ? "ready" : "missing");
-        }
+    if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
+        runtime->config().backend_id == config_.backend_id) {
+        return std::string("zephyr-board-audio:out=") + config_.audio_output_device_name +
+               ",in=" + config_.audio_input_device_name +
+               ",amp=" + (runtime->audio_ready() ? "ready" : "gated") +
+               ",expander=" + (runtime->expander_ready() ? "ready" : "missing");
     }
     return "zephyr-audio:out=" + config_.audio_output_device_name +
            ",in=" + config_.audio_input_device_name;

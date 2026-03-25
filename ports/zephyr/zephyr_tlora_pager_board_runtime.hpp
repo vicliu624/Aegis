@@ -9,12 +9,13 @@
 
 #include "platform/logging/logger.hpp"
 #include "ports/zephyr/zephyr_board_backend_config.hpp"
+#include "ports/zephyr/zephyr_board_runtime.hpp"
 
 struct device;
 
 namespace aegis::ports::zephyr {
 
-class ZephyrTloraPagerBoardRuntime {
+class ZephyrTloraPagerBoardRuntime : public ZephyrBoardRuntime {
 public:
     enum class SharedSpiClient : uint8_t {
         Unknown,
@@ -37,9 +38,10 @@ public:
 
     ZephyrTloraPagerBoardRuntime(platform::Logger& logger, ZephyrBoardBackendConfig config);
 
-    [[nodiscard]] bool initialize();
-    [[nodiscard]] bool ready() const;
-    void log_state(std::string_view stage) const;
+    [[nodiscard]] const ZephyrBoardBackendConfig& config() const override;
+    [[nodiscard]] bool initialize() override;
+    [[nodiscard]] bool ready() const override;
+    void log_state(std::string_view stage) const override;
     [[nodiscard]] int with_shared_spi_client(SharedSpiClient client,
                                              k_timeout_t timeout,
                                              std::string_view operation,
@@ -65,20 +67,25 @@ public:
     [[nodiscard]] bool set_power_enabled(PowerChannel channel, bool enabled) const;
     [[nodiscard]] bool set_display_backlight_enabled(bool enabled) const;
     [[nodiscard]] bool set_keyboard_backlight_enabled(bool enabled) const;
-    void signal_boot_stage(int stage) const;
-    void heartbeat_pulse() const;
+    void signal_boot_stage(int stage) const override;
+    void heartbeat_pulse() const override;
     [[nodiscard]] bool peripheral_power_enabled(PowerChannel channel) const;
-    [[nodiscard]] bool sd_card_present() const;
-    [[nodiscard]] bool expander_ready() const;
-    [[nodiscard]] bool shared_spi_ready() const;
+    [[nodiscard]] bool sd_card_present() const override;
+    [[nodiscard]] bool expander_ready() const override;
+    [[nodiscard]] bool shared_spi_ready() const override;
     [[nodiscard]] SharedSpiClient shared_spi_owner() const;
-    [[nodiscard]] bool keyboard_ready() const;
-    [[nodiscard]] bool radio_ready() const;
-    [[nodiscard]] bool gps_ready() const;
-    [[nodiscard]] bool nfc_ready() const;
-    [[nodiscard]] bool storage_ready() const;
-    [[nodiscard]] bool audio_ready() const;
-    [[nodiscard]] bool hostlink_ready() const;
+    [[nodiscard]] std::string shared_spi_owner_name() const override;
+    [[nodiscard]] bool keyboard_ready() const override;
+    [[nodiscard]] bool radio_ready() const override;
+    [[nodiscard]] bool gps_ready() const override;
+    [[nodiscard]] bool nfc_ready() const override;
+    [[nodiscard]] bool storage_ready() const override;
+    [[nodiscard]] bool audio_ready() const override;
+    [[nodiscard]] bool hostlink_ready() const override;
+    [[nodiscard]] bool board_direct_input_mode() const override;
+    [[nodiscard]] int with_display_spi_client(k_timeout_t timeout,
+                                              std::string_view operation,
+                                              const std::function<int()>& action) const override;
 
 private:
     class TloraPagerXl9555;

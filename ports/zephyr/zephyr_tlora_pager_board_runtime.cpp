@@ -196,6 +196,10 @@ ZephyrTloraPagerBoardRuntime::ZephyrTloraPagerBoardRuntime(platform::Logger& log
     g_tlora_pager_runtime = this;
 }
 
+const ZephyrBoardBackendConfig& ZephyrTloraPagerBoardRuntime::config() const {
+    return config_;
+}
+
 bool ZephyrTloraPagerBoardRuntime::initialize() {
     logger_.info("board", "pager runtime begin");
     const bool devices_ready = acquire_devices();
@@ -446,6 +450,10 @@ ZephyrTloraPagerBoardRuntime::SharedSpiClient ZephyrTloraPagerBoardRuntime::shar
     return shared_spi_owner_;
 }
 
+std::string ZephyrTloraPagerBoardRuntime::shared_spi_owner_name() const {
+    return std::string(shared_spi_client_name(shared_spi_owner_));
+}
+
 bool ZephyrTloraPagerBoardRuntime::keyboard_ready() const {
     return keyboard_ready_;
 }
@@ -476,6 +484,17 @@ bool ZephyrTloraPagerBoardRuntime::audio_ready() const {
 
 bool ZephyrTloraPagerBoardRuntime::hostlink_ready() const {
     return ready();
+}
+
+bool ZephyrTloraPagerBoardRuntime::board_direct_input_mode() const {
+    return true;
+}
+
+int ZephyrTloraPagerBoardRuntime::with_display_spi_client(
+    k_timeout_t timeout,
+    std::string_view operation,
+    const std::function<int()>& action) const {
+    return with_shared_spi_client(SharedSpiClient::Display, timeout, operation, action);
 }
 
 bool ZephyrTloraPagerBoardRuntime::acquire_devices() {

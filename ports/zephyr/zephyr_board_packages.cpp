@@ -6,8 +6,8 @@
 #include "device/common/capability/capability_set.hpp"
 #include "device/packages/mock_device_packages.hpp"
 #include "ports/zephyr/zephyr_board_backend_config.hpp"
+#include "ports/zephyr/zephyr_board_support.hpp"
 #include "ports/zephyr/zephyr_build_config.hpp"
-#include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
 #include "services/audio/zephyr_audio_service.hpp"
 #include "services/gps/zephyr_gps_service.hpp"
 #include "services/hostlink/zephyr_hostlink_service.hpp"
@@ -182,6 +182,7 @@ std::string_view ZephyrDeviceAPackage::package_id() const {
 }
 
 void ZephyrDeviceAPackage::initialize_board(platform::Logger& logger) {
+    (void)initialize_board_runtime(package_id(), logger);
     logger.info("board", "initialize Zephyr device A orchestration");
 }
 
@@ -222,6 +223,7 @@ std::string_view ZephyrDeviceBPackage::package_id() const {
 }
 
 void ZephyrDeviceBPackage::initialize_board(platform::Logger& logger) {
+    (void)initialize_board_runtime(package_id(), logger);
     logger.info("board", "initialize Zephyr device B orchestration");
 }
 
@@ -264,7 +266,7 @@ std::string_view ZephyrTloraPagerSx1262Package::package_id() const {
 void ZephyrTloraPagerSx1262Package::initialize_board(platform::Logger& logger) {
     const auto config = make_tlora_pager_sx1262_backend_config();
     logger.info("board", "initialize " + config.backend_id + " on " + config.target_board);
-    const bool board_ready = bootstrap_tlora_pager_board_runtime(logger);
+    const bool board_ready = initialize_board_runtime(package_id(), logger);
     logger.info("board",
                 std::string("board package runtime ") + (board_ready ? "ready" : "degraded") +
                     " package=" + config.backend_id);
