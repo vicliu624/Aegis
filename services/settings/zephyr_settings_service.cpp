@@ -35,14 +35,20 @@ ZephyrSettingsService::ZephyrSettingsService(std::string namespace_root)
     : namespace_root_(std::move(namespace_root)) {}
 
 void ZephyrSettingsService::set(std::string key, std::string value) {
-    const auto fq_key = full_key(key);
-    settings_save_one(fq_key.c_str(), value.c_str(), value.size());
+    cache_[key] = std::move(value);
 }
 
 std::string ZephyrSettingsService::get(const std::string& key) const {
+    if (const auto it = cache_.find(key); it != cache_.end()) {
+        return it->second;
+    }
+
     ReadContext context;
     const auto fq_key = full_key(key);
     settings_load_subtree_direct(fq_key.c_str(), settings_read_string_cb, &context);
+    if (!context.value.empty()) {
+        cache_[key] = context.value;
+    }
     return context.value;
 }
 

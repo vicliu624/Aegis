@@ -197,6 +197,7 @@ void AegisCore::run_shell_action_sequence(const std::vector<shell::ShellNavigati
 }
 
 void AegisCore::run_descriptor(const AppDescriptor& descriptor) {
+    shell_.clear_app_foreground_state();
     shell_.enter_app(descriptor.manifest.app_id);
     logger_.info("core", "starting app " + descriptor.manifest.app_id);
     active_sessions_.push_back(descriptor.manifest.app_id);
@@ -206,7 +207,13 @@ void AegisCore::run_descriptor(const AppDescriptor& descriptor) {
                               boot_artifacts_->service_bindings,
                               ownership_,
                               session.id(),
-                              descriptor.manifest.requested_permissions);
+                              descriptor.manifest.requested_permissions,
+                              [this](const std::string& root_name) {
+                                  shell_.set_app_foreground_root(root_name);
+                              },
+                              [this](const std::string& tag, const std::string& message) {
+                                  shell_.append_app_foreground_log(tag, message);
+                              });
 
     bool loaded = false;
     bool torn_down = false;
@@ -278,6 +285,7 @@ void AegisCore::run_descriptor(const AppDescriptor& descriptor) {
         boot_artifacts_->service_bindings.text_input()->assign_shell_focus();
     }
     shell_.return_from_app(descriptor.manifest.app_id);
+    shell_.clear_app_foreground_state();
     logger_.info("core",
                  "lifecycle final state=" + std::string(runtime::to_string(session.state())));
     logger_.info("core", "lifecycle history=" + format_lifecycle_history(session));

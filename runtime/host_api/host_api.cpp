@@ -18,13 +18,17 @@ HostApi::HostApi(const device::DeviceProfile& profile,
                  device::ServiceBindingRegistry& services,
                  ResourceOwnershipTable& ownership,
                  std::string session_id,
-                 std::vector<core::AppPermissionId> granted_permissions)
+                 std::vector<core::AppPermissionId> granted_permissions,
+                 std::function<void(const std::string&)> ui_root_observer,
+                 std::function<void(const std::string&, const std::string&)> app_log_observer)
     : profile_(profile),
       services_(services),
       dispatch_(services_),
       ownership_(ownership),
       session_id_(std::move(session_id)),
       granted_permissions_(std::move(granted_permissions)),
+      ui_root_observer_(std::move(ui_root_observer)),
+      app_log_observer_(std::move(app_log_observer)),
       abi_ {.abi_version = AEGIS_HOST_API_ABI_V1,
             .user_data = this,
             .log_write = &HostApi::abi_log_write,
@@ -39,6 +43,9 @@ HostApi::HostApi(const device::DeviceProfile& profile,
 
 void HostApi::log(const std::string& tag, const std::string& message) const {
     services_.logging()->log(tag, message);
+    if (app_log_observer_) {
+        app_log_observer_(tag, message);
+    }
 }
 
 const device::CapabilitySet& HostApi::capabilities() const {
@@ -93,6 +100,9 @@ void HostApi::create_ui_root(const std::string& name) const {
         return;
     }
     ownership_.track(session_id_, "ui_root:" + name);
+    if (ui_root_observer_) {
+        ui_root_observer_(name);
+    }
 }
 
 bool HostApi::destroy_ui_root(const std::string& name) const {

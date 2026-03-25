@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -23,7 +24,9 @@ public:
             device::ServiceBindingRegistry& services,
             ResourceOwnershipTable& ownership,
             std::string session_id,
-            std::vector<core::AppPermissionId> granted_permissions);
+            std::vector<core::AppPermissionId> granted_permissions,
+            std::function<void(const std::string&)> ui_root_observer = {},
+            std::function<void(const std::string&, const std::string&)> app_log_observer = {});
 
     void log(const std::string& tag, const std::string& message) const;
     [[nodiscard]] const device::CapabilitySet& capabilities() const;
@@ -82,6 +85,8 @@ private:
     ResourceOwnershipTable& ownership_;
     std::string session_id_;
     std::vector<core::AppPermissionId> granted_permissions_;
+    std::function<void(const std::string&)> ui_root_observer_;
+    std::function<void(const std::string&, const std::string&)> app_log_observer_;
     mutable std::unordered_map<void*, std::string> owned_allocations_;
     aegis_host_api_v1_t abi_;
 };

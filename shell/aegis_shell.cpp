@@ -1,5 +1,7 @@
 #include "shell/aegis_shell.hpp"
 
+#include <iterator>
+
 namespace aegis::shell {
 
 AegisShell::AegisShell(platform::Logger& logger) : logger_(logger), controller_(logger) {}
@@ -89,11 +91,50 @@ void AegisShell::load_launcher_catalog(const core::AppCatalog& catalog) {
 
 void AegisShell::enter_app(const std::string& app_id) const {
     controller_.enter_app(app_id);
+    if (presentation_sink_ != nullptr) {
+        presentation_sink_->present(build_frame("app", "launch=" + app_id));
+    }
 }
 
 void AegisShell::return_from_app(const std::string& app_id) const {
     controller_.return_from_app(app_id);
     logger_.info("shell", "returned from app " + app_id);
+}
+
+void AegisShell::set_app_foreground_root(std::string root_name) {
+    app_foreground_.root_name = std::move(root_name);
+    if (controller_.navigation_state().surface() == ShellSurface::AppForeground) {
+        present_frame("app", "root=" + app_foreground_.root_name);
+    }
+}
+
+void AegisShell::append_app_foreground_log(std::string tag, std::string message) {
+    std::string line;
+    if (!tag.empty()) {
+        line += "[";
+        line += tag;
+        line += "] ";
+    }
+    line += message;
+    app_foreground_.lines.push_back({.text = std::move(line)});
+    constexpr std::size_t kMaxForegroundLines = 6;
+    if (app_foreground_.lines.size() > kMaxForegroundLines) {
+        const auto overflow = app_foreground_.lines.size() - kMaxForegroundLines;
+        app_foreground_.lines.erase(app_foreground_.lines.begin(),
+                                    std::next(app_foreground_.lines.begin(),
+                                              static_cast<long long>(overflow)));
+    }
+    if (controller_.navigation_state().surface() == ShellSurface::AppForeground) {
+        present_frame("app",
+                      app_foreground_.root_name.empty()
+                          ? "foreground"
+                          : "root=" + app_foreground_.root_name);
+    }
+}
+
+void AegisShell::clear_app_foreground_state() {
+    app_foreground_.root_name.clear();
+    app_foreground_.lines.clear();
 }
 
 std::optional<std::string> AegisShell::handle_action(ShellNavigationAction action) {
@@ -306,8 +347,21 @@ ShellPresentationFrame AegisShell::build_frame(std::string headline, std::string
                     {.text = "App: " + controller_.navigation_state().active_app_id(),
                      .emphasized = true});
             }
-            frame.lines.push_back({.text = "Shell retains host control"});
-            frame.lines.push_back({.text = "Back path is system-governed"});
+            if (!app_foreground_.root_name.empty()) {
+                frame.lines.push_back({.text = "Root: " + app_foreground_.root_name});
+            }
+            if (!app_foreground_.lines.empty()) {
+                for (const auto& line : app_foreground_.lines) {
+                    if (frame.lines.size() >= 8) {
+                        break;
+                    }
+                    frame.lines.push_back(line);
+                }
+            } else {
+                frame.lines.push_back({.text = "App foreground acquired"});
+                frame.lines.push_back({.text = "Shell retains host control"});
+                frame.lines.push_back({.text = "Back path is system-governed"});
+            }
             break;
         case ShellSurface::Recovery:
             frame.context = "return path";

@@ -96,8 +96,10 @@ function(aegis_register_zephyr_app_module)
     endif()
 
     set(module_target "${AEGIS_APP_ID}_llext_module")
+    set(module_library_target "${module_target}_llext_lib")
     set(module_output_dir "${AEGIS_ZEPHYR_APP_MODULE_STAGING_DIR}/${AEGIS_APP_ID}")
     set(module_output_file "${module_output_dir}/app.llext")
+    set(module_debug_elf "${CMAKE_BINARY_DIR}/llext/${module_target}_debug.elf")
 
     file(MAKE_DIRECTORY "${module_output_dir}")
 
@@ -110,23 +112,34 @@ function(aegis_register_zephyr_app_module)
         ${CMAKE_CURRENT_LIST_DIR}/../..
         ${CMAKE_CURRENT_LIST_DIR}/../../sdk/include)
 
-    add_llext_command(
-        TARGET ${module_target}
-        POST_PKG
+    set(module_stage_target "${module_target}_stage")
+    set(module_stage_commands
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${module_output_dir}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:${module_library_target}>"
+            "${module_debug_elf}"
+        COMMAND ${CMAKE_OBJCOPY}
+            --strip-unneeded
+            --remove-section=.xt.*
+            --remove-section=.xtensa.info
+            "${module_debug_elf}"
+            "${module_output_file}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${AEGIS_MANIFEST}"
-            "${module_output_dir}/manifest.json"
-        VERBATIM)
+            "${module_output_dir}/manifest.json")
 
     if(AEGIS_ICON AND EXISTS "${AEGIS_ICON}")
-        add_llext_command(
-            TARGET ${module_target}
-            POST_PKG
+        list(APPEND module_stage_commands
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${AEGIS_ICON}"
-                "${module_output_dir}/icon.bin"
-            VERBATIM)
+                "${module_output_dir}/icon.bin")
     endif()
 
-    add_dependencies(aegis_zephyr_app_modules ${module_target})
+    add_custom_target(${module_stage_target}
+        ${module_stage_commands}
+        DEPENDS ${module_library_target}
+        COMMENT "Staging Zephyr app module ${AEGIS_APP_ID}"
+        VERBATIM)
+
+    add_dependencies(aegis_zephyr_app_modules ${module_stage_target})
 endfunction()

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <vector>
 
 #include "core/app_registry/app_catalog.hpp"
 #include "device/common/profile/shell_surface_profile.hpp"
@@ -29,6 +30,9 @@ public:
     void load_launcher_catalog(const core::AppCatalog& catalog);
     void enter_app(const std::string& app_id) const;
     void return_from_app(const std::string& app_id) const;
+    void set_app_foreground_root(std::string root_name);
+    void append_app_foreground_log(std::string tag, std::string message);
+    void clear_app_foreground_state();
     [[nodiscard]] std::optional<std::string> handle_action(ShellNavigationAction action);
 
     [[nodiscard]] const SettingsModel& settings_model() const;
@@ -45,6 +49,10 @@ private:
     void log_surface_summary() const;
 
     platform::Logger& logger_;
+    struct AppForegroundState {
+        std::string root_name;
+        std::vector<ShellPresentationLine> lines;
+    };
     mutable ShellController controller_;
     ShellPresentationSink* presentation_sink_ {nullptr};
     ShellInputModel input_;
@@ -52,6 +60,7 @@ private:
     StatusModel status_;
     NotificationModel notifications_;
     LauncherModel launcher_;
+    AppForegroundState app_foreground_;
 };
 
 }  // namespace aegis::shell

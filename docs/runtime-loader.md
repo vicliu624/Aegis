@@ -413,6 +413,32 @@ Underlying LLEXT details must stay behind a runtime adapter boundary.
 
 ---
 
+## 16. Current Zephyr bring-up notes
+
+The current LilyGo T-LoRa Pager bring-up exposed two implementation details that are easy to lose if
+they remain only in serial logs.
+
+### 16.1 App module staging must be explicit
+
+When packaging Zephyr LLEXT applications, the final staged `app.llext` should be regenerated from the
+current module library as an explicit build step.
+
+Relying on implicit post-package artifacts can leave a stale staged module in `/lfs/apps/<app>/`,
+which makes runtime debugging misleading because the loader appears healthy while the device is still
+running an older binary.
+
+### 16.2 Xtensa `R_XTENSA_RTLD` is a loader no-op in this path
+
+On the ESP32-S3 Xtensa path, Zephyr LLEXT currently encounters `R_XTENSA_RTLD` relocations during load.
+For the Aegis writable-buffer loader path used in bring-up, these relocations are intentionally treated
+as a no-op rather than as an unsupported relocation failure.
+
+That behavior belongs inside the Zephyr LLEXT backend implementation, not in Aegis app code or in the
+runtime admission layer. If a fresh environment starts logging unsupported relocation warnings again,
+the local Zephyr Xtensa relocation handler should be checked first.
+
+---
+
 ## 19. Minimal first implementation
 
 The first useful runtime loader implementation should prove:
