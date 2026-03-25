@@ -18,6 +18,12 @@ DEFAULT_OVERLAY = "boards/lilygo_tlora_pager_sx1262.overlay"
 DEFAULT_BUILD_DIR = "build-zephyr"
 DEFAULT_FLASH_BAUD = "921600"
 DEFAULT_FLASH_CHIP = "esp32s3"
+DEFAULT_BOOTSTRAP_PACKAGE = "zephyr_tlora_pager_sx1262"
+
+OVERLAY_PACKAGE_DEFAULTS = {
+    "boards/lilygo_tlora_pager_sx1262.overlay": "zephyr_tlora_pager_sx1262",
+    "boards/lilygo_tdeck.overlay": "zephyr_tdeck_sx1262",
+}
 
 
 @dataclass(frozen=True)
@@ -101,6 +107,15 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
         help=f"Devicetree overlay relative to ports/zephyr. Default: {DEFAULT_OVERLAY}",
     )
     parser.add_argument(
+        "--package",
+        default="",
+        help=(
+            "Aegis board package id to bootstrap. "
+            "If omitted, a known overlay default is used, otherwise "
+            f"{DEFAULT_BOOTSTRAP_PACKAGE}."
+        ),
+    )
+    parser.add_argument(
         "--compiled-fallback",
         choices=("on", "off"),
         default="off",
@@ -163,8 +178,15 @@ def absolute_build_dir(paths: Paths, build_dir: str) -> pathlib.Path:
     return paths.repo_root / build_path
 
 
+def resolve_bootstrap_package(args: argparse.Namespace) -> str:
+    if getattr(args, "package", ""):
+        return args.package
+    return OVERLAY_PACKAGE_DEFAULTS.get(getattr(args, "overlay", ""), DEFAULT_BOOTSTRAP_PACKAGE)
+
+
 def configure_command(args: argparse.Namespace, paths: Paths) -> list[str]:
     build_dir = absolute_build_dir(paths, args.build_dir)
+    bootstrap_package = resolve_bootstrap_package(args)
     command = [
         "cmake",
         "-S",
@@ -186,6 +208,7 @@ def configure_command(args: argparse.Namespace, paths: Paths) -> list[str]:
                 "-DAEGIS_ZEPHYR_ALLOW_UNSUPPORTED_LOCAL_PATCH_VERSION="
                 f"{bool_to_cmake(args.allow_unsupported_local_patch_version)}"
             ),
+            f"-DAEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE={bootstrap_package}",
             f"-DAEGIS_ZEPHYR_FLASH_BAUD={args.flash_baud}",
             f"-DAEGIS_ZEPHYR_FLASH_CHIP={args.flash_chip}",
         ]

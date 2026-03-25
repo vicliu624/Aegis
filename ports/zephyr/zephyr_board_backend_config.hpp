@@ -9,16 +9,19 @@ namespace aegis::ports::zephyr {
 enum class ZephyrBoardRuntimeFamily : uint8_t {
     Generic,
     TloraPager,
+    TDeck,
 };
 
 enum class ZephyrBoardDisplayBackendFamily : uint8_t {
     Generic,
     Pager,
+    TDeck,
 };
 
 enum class ZephyrBoardInputBackendFamily : uint8_t {
     Generic,
     PagerDirect,
+    TDeckDirect,
 };
 
 struct ZephyrBoardBackendConfig {
@@ -61,6 +64,7 @@ struct ZephyrBoardBackendConfig {
     std::string rtc_device_name;
     std::string battery_device_name;
     std::string nfc_device_name;
+    int battery_adc_pin {-1};
     int display_backlight_pin {-1};
     int display_dc_pin {-1};
     int display_cs_pin {-1};
@@ -82,6 +86,12 @@ struct ZephyrBoardBackendConfig {
     int rotary_a_pin {-1};
     int rotary_b_pin {-1};
     int rotary_center_pin {-1};
+    int touch_irq_pin {-1};
+    int trackball_up_pin {-1};
+    int trackball_down_pin {-1};
+    int trackball_left_pin {-1};
+    int trackball_right_pin {-1};
+    int trackball_click_pin {-1};
     std::array<int, 6> coordination_quiesce_pins {-1, -1, -1, -1, -1, -1};
     std::string notes;
 };
@@ -89,5 +99,6 @@ struct ZephyrBoardBackendConfig {
 [[nodiscard]] ZephyrBoardBackendConfig make_device_a_backend_config();
 [[nodiscard]] ZephyrBoardBackendConfig make_device_b_backend_config();
 [[nodiscard]] ZephyrBoardBackendConfig make_tlora_pager_sx1262_backend_config();
+[[nodiscard]] ZephyrBoardBackendConfig make_tdeck_sx1262_backend_config();
 
 }  // namespace aegis::ports::zephyr

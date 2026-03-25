@@ -1,0 +1,146 @@
+/*
+ * LilyGo T-Deck adaptation overlay layered on top of the upstream
+ * esp32s3_devkitc SoC target. The resident Aegis runtime drives display and
+ * input mostly through board-aware backends, so this overlay focuses on buses,
+ * aliases, and base pin routing.
+ */
+
+#include <zephyr/dt-bindings/i2c/i2c.h>
+
+/ {
+	chosen {
+		zephyr,console = &usb_serial;
+		zephyr,shell-uart = &usb_serial;
+	};
+
+	aliases {
+		lora0 = &spi2;
+		gps0 = &uart1;
+		audioout0 = &i2s0;
+		audioin0 = &i2s0;
+		rtc0 = &i2c0;
+		battery0 = &i2c0;
+		hostlink0 = &uart0;
+		rotary0 = &tdeck_trackball;
+	};
+
+	tdeck_trackball: gpio-keys {
+		compatible = "gpio-keys";
+
+		trackball_up {
+			gpios = <&gpio0 3 GPIO_ACTIVE_LOW>;
+			label = "Trackball Up";
+			zephyr,code = <103>;
+		};
+
+		trackball_down {
+			gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
+			label = "Trackball Down";
+			zephyr,code = <108>;
+		};
+
+		trackball_left {
+			gpios = <&gpio0 1 GPIO_ACTIVE_LOW>;
+			label = "Trackball Left";
+			zephyr,code = <105>;
+		};
+
+		trackball_right {
+			gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;
+			label = "Trackball Right";
+			zephyr,code = <106>;
+		};
+
+		trackball_click {
+			gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
+			label = "Trackball Click";
+			zephyr,code = <28>;
+		};
+	};
+};
+
+&pinctrl {
+	tdeck_i2c0_default: tdeck_i2c0_default {
+		group1 {
+			pinmux = <I2C0_SDA_GPIO18>,
+				 <I2C0_SCL_GPIO8>;
+			bias-pull-up;
+			drive-open-drain;
+			output-high;
+		};
+	};
+
+	tdeck_uart1_default: tdeck_uart1_default {
+		group1 {
+			pinmux = <UART1_TX_GPIO43>;
+			output-high;
+		};
+
+		group2 {
+			pinmux = <UART1_RX_GPIO44>;
+			bias-pull-up;
+		};
+	};
+
+	tdeck_spim2_default: tdeck_spim2_default {
+		group1 {
+			pinmux = <SPIM2_MISO_GPIO38>,
+				 <SPIM2_SCLK_GPIO40>;
+		};
+
+		group2 {
+			pinmux = <SPIM2_MOSI_GPIO41>;
+			output-low;
+		};
+	};
+};
+
+&i2c0 {
+	status = "okay";
+	clock-frequency = <I2C_BITRATE_FAST>;
+	pinctrl-0 = <&tdeck_i2c0_default>;
+	pinctrl-names = "default";
+};
+
+&uart1 {
+	status = "okay";
+	current-speed = <38400>;
+	pinctrl-0 = <&tdeck_uart1_default>;
+	pinctrl-names = "default";
+};
+
+&usb_serial {
+	status = "okay";
+};
+
+&spi2 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+	pinctrl-0 = <&tdeck_spim2_default>;
+	pinctrl-names = "default";
+};
+
+&i2s0 {
+	status = "okay";
+};
+
+&adc0 {
+	status = "okay";
+};
+
+&gpio0 {
+	tdeck_board_power {
+		gpio-hog;
+		gpios = <10 GPIO_ACTIVE_HIGH>;
+		output-high;
+	};
+};
+
+&gpio1 {
+	tdeck_display_backlight {
+		gpio-hog;
+		gpios = <10 GPIO_ACTIVE_HIGH>;
+		output-high;
+	};
+};

@@ -11,8 +11,6 @@
 
 namespace aegis::ports::zephyr {
 
-inline constexpr char kBootstrapDevicePackage[] = "zephyr_tlora_pager_sx1262";
-
 struct ZephyrBoardSupport {
     device::BoardPackagePtr package;
     const ZephyrBoardDescriptor* descriptor {nullptr};

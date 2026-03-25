@@ -24,11 +24,13 @@ enum class ZephyrBoardCoordinationDomain : uint8_t {
 enum class ZephyrShellDisplayBackendProfile : uint8_t {
     Generic,
     Pager,
+    TDeck,
 };
 
 enum class ZephyrShellInputBackendProfile : uint8_t {
     Generic,
     PagerDirect,
+    TDeckDirect,
 };
 
 class ZephyrBoardRuntime {
@@ -49,6 +51,11 @@ public:
     [[nodiscard]] virtual std::string coordination_domain_owner_name(
         ZephyrBoardCoordinationDomain domain) const;
     [[nodiscard]] virtual bool keyboard_ready() const;
+    [[nodiscard]] virtual bool touch_ready() const;
+    [[nodiscard]] virtual bool battery_ready() const;
+    [[nodiscard]] virtual int battery_percent() const;
+    [[nodiscard]] virtual int battery_voltage_mv() const;
+    [[nodiscard]] virtual bool battery_charging() const;
     [[nodiscard]] virtual bool radio_ready() const;
     [[nodiscard]] virtual bool gps_ready() const;
     [[nodiscard]] virtual bool nfc_ready() const;
@@ -62,6 +69,7 @@ public:
     [[nodiscard]] virtual bool keyboard_irq_asserted() const;
     [[nodiscard]] virtual bool keyboard_pending_event_count(uint8_t& pending) const;
     [[nodiscard]] virtual bool keyboard_read_event(uint8_t& raw_event) const;
+    [[nodiscard]] virtual bool keyboard_read_character(uint8_t& raw_character) const;
     [[nodiscard]] virtual int with_coordination_domain(
         ZephyrBoardCoordinationDomain domain,
         k_timeout_t timeout,

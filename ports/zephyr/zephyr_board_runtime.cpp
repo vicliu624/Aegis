@@ -70,6 +70,26 @@ bool ZephyrBoardRuntime::keyboard_ready() const {
     return false;
 }
 
+bool ZephyrBoardRuntime::touch_ready() const {
+    return false;
+}
+
+bool ZephyrBoardRuntime::battery_ready() const {
+    return false;
+}
+
+int ZephyrBoardRuntime::battery_percent() const {
+    return -1;
+}
+
+int ZephyrBoardRuntime::battery_voltage_mv() const {
+    return -1;
+}
+
+bool ZephyrBoardRuntime::battery_charging() const {
+    return false;
+}
+
 bool ZephyrBoardRuntime::radio_ready() const {
     return ready();
 }
@@ -102,6 +122,8 @@ ZephyrShellDisplayBackendProfile ZephyrBoardRuntime::shell_display_backend_profi
     switch (config().display_backend_family) {
         case ZephyrBoardDisplayBackendFamily::Pager:
             return ZephyrShellDisplayBackendProfile::Pager;
+        case ZephyrBoardDisplayBackendFamily::TDeck:
+            return ZephyrShellDisplayBackendProfile::TDeck;
         case ZephyrBoardDisplayBackendFamily::Generic:
         default:
             return ZephyrShellDisplayBackendProfile::Generic;
@@ -112,6 +134,8 @@ ZephyrShellInputBackendProfile ZephyrBoardRuntime::shell_input_backend_profile()
     switch (config().input_backend_family) {
         case ZephyrBoardInputBackendFamily::PagerDirect:
             return ZephyrShellInputBackendProfile::PagerDirect;
+        case ZephyrBoardInputBackendFamily::TDeckDirect:
+            return ZephyrShellInputBackendProfile::TDeckDirect;
         case ZephyrBoardInputBackendFamily::Generic:
         default:
             return ZephyrShellInputBackendProfile::Generic;
@@ -129,6 +153,11 @@ bool ZephyrBoardRuntime::keyboard_pending_event_count(uint8_t& pending) const {
 
 bool ZephyrBoardRuntime::keyboard_read_event(uint8_t& raw_event) const {
     raw_event = 0;
+    return false;
+}
+
+bool ZephyrBoardRuntime::keyboard_read_character(uint8_t& raw_character) const {
+    raw_character = 0;
     return false;
 }
 

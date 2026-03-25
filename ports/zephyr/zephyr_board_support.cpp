@@ -4,6 +4,7 @@
 
 #include "ports/zephyr/zephyr_board_descriptors.hpp"
 #include "ports/zephyr/zephyr_board_packages.hpp"
+#include "ports/zephyr/zephyr_tdeck_board_runtime.hpp"
 #include "ports/zephyr/zephyr_tlora_pager_board_runtime.hpp"
 
 namespace aegis::ports::zephyr {
@@ -11,6 +12,8 @@ namespace aegis::ports::zephyr {
 ZephyrBoardRuntime& runtime_for_package(std::string_view package_id, platform::Logger& logger) {
     const auto& descriptor = descriptor_for_package(package_id);
     switch (descriptor.config.runtime_family) {
+        case ZephyrBoardRuntimeFamily::TDeck:
+            return tdeck_board_runtime(logger);
         case ZephyrBoardRuntimeFamily::TloraPager:
             return tlora_pager_board_runtime(logger);
         case ZephyrBoardRuntimeFamily::Generic:

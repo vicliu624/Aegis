@@ -150,6 +150,44 @@ device::DeviceProfile make_tlora_pager_profile(const ZephyrBoardBackendConfig& c
     };
 }
 
+device::DeviceProfile make_tdeck_profile(const ZephyrBoardBackendConfig& config) {
+    return device::DeviceProfile {
+        .device_id = config.profile_device_id,
+        .board_family = config.board_family,
+        .display_topology_name = "single-display-320x240-st7789-touch",
+        .input_topology_name = "i2c-keyboard-trackball-touch",
+        .display = {.width = config.display_width,
+                    .height = config.display_height,
+                    .touch = config.display_touch,
+                    .layout_class = config.display_layout_class},
+        .input = {.keyboard = config.keyboard_input,
+                  .pointer = config.pointer_input,
+                  .joystick = config.joystick_input,
+                  .primary_input = config.primary_input_name},
+        .storage = {.persistent_storage = true, .removable_storage = config.removable_storage},
+        .power = {.battery_status = true, .low_power_mode = true},
+        .comm = {.radio = true, .gps = true, .usb_hostlink = true},
+        .capabilities =
+            device::CapabilitySet {
+                cap(device::CapabilityId::Display, device::CapabilityLevel::Full, "ST7789 320x240 landscape display"),
+                cap(device::CapabilityId::KeyboardInput, device::CapabilityLevel::Full, "I2C character keyboard at 0x55"),
+                cap(device::CapabilityId::PointerInput, device::CapabilityLevel::Full, "GT911 touch panel"),
+                cap(device::CapabilityId::JoystickInput, device::CapabilityLevel::Full, "Trackball GPIO navigation"),
+                cap(device::CapabilityId::RadioMessaging, device::CapabilityLevel::Full, "SX1262 LoRa transceiver"),
+                cap(device::CapabilityId::GpsFix, device::CapabilityLevel::Full, "UART GPS path"),
+                cap(device::CapabilityId::AudioOutput, device::CapabilityLevel::Full, "I2S speaker path"),
+                cap(device::CapabilityId::MicrophoneInput, device::CapabilityLevel::Degraded, "I2S microphone path"),
+                cap(device::CapabilityId::BatteryStatus, device::CapabilityLevel::Full, "AXP2101 battery telemetry"),
+                cap(device::CapabilityId::RemovableStorage, device::CapabilityLevel::Full, "microSD slot on shared SPI"),
+                cap(device::CapabilityId::UsbHostlink, device::CapabilityLevel::Full, "USB CDC hostlink path"),
+            },
+        .shell_hints = {.launcher_style = "tdeck-grid", .status_density = "dense"},
+        .runtime_limits = {.max_app_memory_bytes = 512 * 1024,
+                           .max_ui_memory_bytes = 160 * 1024,
+                           .max_foreground_apps = 1},
+    };
+}
+
 device::ShellSurfaceProfile make_tlora_pager_shell_profile() {
     return device::ShellSurfaceProfile {
         .settings_entries = {{.id = "system", .label = "System"},
@@ -166,6 +204,32 @@ device::ShellSurfaceProfile make_tlora_pager_shell_profile() {
                          {.id = "gps", .value = "mia-m10q"},
                          {.id = "audio", .value = "es8311"}},
         .notification_entries = {{.title = "System Ready", .body = "Shell initialized for LilyGo T-LoRa-Pager"}},
+        .navigation_actions = {shell::ShellNavigationAction::MoveNext,
+                               shell::ShellNavigationAction::MovePrevious,
+                               shell::ShellNavigationAction::Select,
+                               shell::ShellNavigationAction::Back,
+                               shell::ShellNavigationAction::OpenMenu,
+                               shell::ShellNavigationAction::OpenSettings,
+                               shell::ShellNavigationAction::OpenNotifications},
+    };
+}
+
+device::ShellSurfaceProfile make_tdeck_shell_profile() {
+    return device::ShellSurfaceProfile {
+        .settings_entries = {{.id = "system", .label = "System"},
+                             {.id = "display", .label = "Display"},
+                             {.id = "radio", .label = "LoRa"},
+                             {.id = "gps", .label = "GPS"},
+                             {.id = "storage", .label = "Storage"},
+                             {.id = "power", .label = "Power"},
+                             {.id = "touch", .label = "Touch"}},
+        .status_items = {{.id = "display", .value = "320x240-st7789"},
+                         {.id = "input", .value = "keyboard+trackball+touch"},
+                         {.id = "keyboard", .value = "i2c-char-kbd"},
+                         {.id = "pointer", .value = "gt911"},
+                         {.id = "radio", .value = "sx1262"},
+                         {.id = "power", .value = "axp2101"}},
+        .notification_entries = {{.title = "System Ready", .body = "Shell initialized for LilyGo T-Deck"}},
         .navigation_actions = {shell::ShellNavigationAction::MoveNext,
                                shell::ShellNavigationAction::MovePrevious,
                                shell::ShellNavigationAction::Select,
@@ -230,6 +294,24 @@ const ZephyrBoardDescriptor& tlora_pager_descriptor() {
     return descriptor;
 }
 
+const ZephyrBoardDescriptor& tdeck_descriptor() {
+    static const ZephyrBoardDescriptor descriptor = []() {
+        auto config = make_tdeck_sx1262_backend_config();
+        return ZephyrBoardDescriptor {
+            .package_id = "zephyr_tdeck_sx1262",
+            .config = config,
+            .profile = make_tdeck_profile(config),
+            .shell_surface_profile = make_tdeck_shell_profile(),
+            .bringup = {.initialization_banner = "initialize " + config.backend_id + " on " + config.target_board,
+                        .runtime_ready_stage = "pre-display",
+                        .input_ready_stage = "post-input-init"},
+            .text_input_strategy = ZephyrBoardTextInputStrategy::InMemoryKeyboard,
+            .text_input_source_name = "tdeck-i2c-keyboard",
+        };
+    }();
+    return descriptor;
+}
+
 }  // namespace
 
 const ZephyrBoardDescriptor& descriptor_for_package(std::string_view package_id) {
@@ -242,11 +324,17 @@ const ZephyrBoardDescriptor& descriptor_for_package(std::string_view package_id)
     if (package_id == tlora_pager_descriptor().package_id) {
         return tlora_pager_descriptor();
     }
+    if (package_id == tdeck_descriptor().package_id) {
+        return tdeck_descriptor();
+    }
     throw std::runtime_error("unknown Zephyr board descriptor: " + std::string(package_id));
 }
 
 std::vector<std::reference_wrapper<const ZephyrBoardDescriptor>> all_zephyr_board_descriptors() {
-    return {std::cref(tlora_pager_descriptor()), std::cref(device_a_descriptor()), std::cref(device_b_descriptor())};
+    return {std::cref(tlora_pager_descriptor()),
+            std::cref(tdeck_descriptor()),
+            std::cref(device_a_descriptor()),
+            std::cref(device_b_descriptor())};
 }
 
 }  // namespace aegis::ports::zephyr

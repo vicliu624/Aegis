@@ -15,6 +15,7 @@ enum class ZephyrBoardTextInputStrategy : uint8_t {
     InMemoryUnavailable,
     InMemoryKeyboard,
     ZephyrService,
+    TDeckService,
 };
 
 struct ZephyrBoardBringupPlan {

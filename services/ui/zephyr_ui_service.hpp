@@ -30,6 +30,7 @@ public:
 private:
     [[nodiscard]] bool rotary_ready() const;
     [[nodiscard]] bool keyboard_ready() const;
+    [[nodiscard]] bool pointer_ready() const;
 
     ports::zephyr::ZephyrBoardBackendConfig config_;
 };

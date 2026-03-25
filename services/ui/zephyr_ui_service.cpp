@@ -6,6 +6,8 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
 
+#include "ports/zephyr/zephyr_board_runtime.hpp"
+
 namespace aegis::services {
 
 namespace {
@@ -65,16 +67,20 @@ ZephyrInputService::ZephyrInputService(ports::zephyr::ZephyrBoardBackendConfig c
 InputInfo ZephyrInputService::input_info() const {
     const bool has_rotary = rotary_ready();
     const bool has_keyboard = keyboard_ready();
+    const bool has_pointer = pointer_ready();
     return InputInfo {
         .keyboard = has_keyboard,
-        .pointer = false,
+        .pointer = has_pointer,
         .joystick = has_rotary,
-        .primary_input = has_keyboard
+        .primary_input = has_pointer
+                             ? (has_keyboard ? "touch+keyboard" : "touch")
+                             : has_keyboard
                              ? (has_rotary ? "keyboard+rotary" : "keyboard")
                              : (has_rotary ? "rotary+center" : "buttons"),
         .input_mode =
             std::string("zephyr-input:rotary=") + (has_rotary ? "ready" : "missing") +
-            ",keyboard=" + (has_keyboard ? "tca8418-ready" : "absent"),
+            ",keyboard=" + (has_keyboard ? "ready" : "absent") +
+            ",pointer=" + (has_pointer ? "touch-ready" : "absent"),
     };
 }
 
@@ -87,11 +93,24 @@ bool ZephyrInputService::rotary_ready() const {
 }
 
 bool ZephyrInputService::keyboard_ready() const {
+    if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
+        runtime->config().backend_id == config_.backend_id) {
+        return runtime->keyboard_ready();
+    }
+
     if (!config_.keyboard_input || config_.keyboard_device_name.empty()) {
         return false;
     }
 
     return ready(config_.keyboard_device_name);
+}
+
+bool ZephyrInputService::pointer_ready() const {
+    if (const auto* runtime = ports::zephyr::try_active_zephyr_board_runtime(); runtime != nullptr &&
+        runtime->config().backend_id == config_.backend_id) {
+        return runtime->touch_ready();
+    }
+    return config_.display_touch;
 }
 
 }  // namespace aegis::services

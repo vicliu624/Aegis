@@ -83,6 +83,8 @@ set(AEGIS_ZEPHYR_FLASH_BAUD "921600" CACHE STRING
     "Baud rate used by the appfs flash helper")
 set(AEGIS_ZEPHYR_FLASH_PORT "" CACHE STRING
     "Serial port used by the appfs flash helper")
+set(AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE "zephyr_tlora_pager_sx1262" CACHE STRING
+    "Board package id bootstrapped by the resident Aegis Zephyr target")
 
 target_include_directories(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../..
@@ -92,7 +94,8 @@ target_compile_definitions(app PRIVATE
     AEGIS_ZEPHYR_ENABLE_COMPILED_APP_FALLBACK=$<BOOL:${AEGIS_ZEPHYR_ENABLE_COMPILED_APP_FALLBACK}>
     AEGIS_ZEPHYR_APPFS_MOUNT_POINT=\"/lfs\"
     AEGIS_ZEPHYR_APPFS_APPS_ROOT=\"/lfs/apps\"
-    AEGIS_ZEPHYR_BOOT_SELFTEST_APP_ID=\"${AEGIS_ZEPHYR_BOOT_SELFTEST_APP_ID}\")
+    AEGIS_ZEPHYR_BOOT_SELFTEST_APP_ID=\"${AEGIS_ZEPHYR_BOOT_SELFTEST_APP_ID}\"
+    AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE=\"${AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE}\")
 
 target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/input_tca8418_keypad.c
@@ -110,6 +113,8 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_shell_input_backend.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_shell_display_adapter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_shell_input_adapter.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/zephyr_tdeck_board_providers.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/zephyr_tdeck_board_runtime.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_tlora_pager_board_providers.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_tlora_pager_board_runtime.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../core/aegis_core/aegis_core.cpp

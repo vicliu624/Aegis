@@ -173,9 +173,44 @@ void ZephyrTloraPagerSx1262Package::bind_services(device::ServiceBindingRegistry
                     " radio=" + config.radio_device_name);
 }
 
+std::string_view ZephyrTdeckSx1262Package::package_id() const {
+    return "zephyr_tdeck_sx1262";
+}
+
+void ZephyrTdeckSx1262Package::initialize_board(platform::Logger& logger) {
+    const auto& descriptor = descriptor_for_package(package_id());
+    logger.info("board", descriptor.bringup.initialization_banner);
+    const bool board_ready = initialize_board_runtime(package_id(), logger);
+    logger.info("board",
+                std::string("board package runtime ") + (board_ready ? "ready" : "degraded") +
+                    " package=" + descriptor.config.backend_id);
+}
+
+device::DeviceProfile ZephyrTdeckSx1262Package::create_profile() const {
+    return descriptor_for_package(package_id()).profile;
+}
+
+device::ShellSurfaceProfile ZephyrTdeckSx1262Package::create_shell_surface_profile() const {
+    return descriptor_for_package(package_id()).shell_surface_profile;
+}
+
+void ZephyrTdeckSx1262Package::bind_services(device::ServiceBindingRegistry& bindings,
+                                             platform::Logger& logger) const {
+    const auto& descriptor = descriptor_for_package(package_id());
+    bind_descriptor_services(descriptor, bindings, logger);
+    const auto& config = descriptor.config;
+    logger.info("board",
+                "services bound for " + config.backend_id + " display=" + config.display_device_name +
+                    " keyboard=" + config.keyboard_device_name +
+                    " touch-irq=" + std::to_string(config.touch_irq_pin) +
+                    " gps=" + config.gps_device_name +
+                    " radio=" + config.radio_device_name);
+}
+
 std::vector<device::BoardPackagePtr> make_zephyr_board_packages() {
     std::vector<device::BoardPackagePtr> packages;
     packages.push_back(std::make_shared<ZephyrTloraPagerSx1262Package>());
+    packages.push_back(std::make_shared<ZephyrTdeckSx1262Package>());
     packages.push_back(std::make_shared<ZephyrDeviceAPackage>());
     packages.push_back(std::make_shared<ZephyrDeviceBPackage>());
     return packages;
