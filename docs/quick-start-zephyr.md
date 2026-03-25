@@ -169,7 +169,7 @@ configure.
 If you want the older Linux-specific compatibility path, this still exists:
 
 ```bash
-python3 scripts/build_zephyr.py check-host-env
+python3 scripts/build_zephyr.py check-linux-env
 ```
 
 ### 6.2 If the check reports missing tools
@@ -228,6 +228,12 @@ Treat WSL like Linux, but keep one rule in mind:
 ### 7.1 First check inside WSL
 
 From the repository root inside the WSL distro shell:
+
+```bash
+python3 scripts/build_zephyr.py check-host-env
+```
+
+If you specifically want the older Linux-only compatibility helper, it still exists:
 
 ```bash
 python3 scripts/build_zephyr.py check-linux-env

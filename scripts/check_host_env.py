@@ -13,6 +13,14 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class CheckResult:
+    label: str
+    ok: bool
+    detail: str
+    suggestions: list[str]
+
+
+@dataclass(frozen=True)
 class HostContext:
     platform_name: str
     is_wsl: bool
@@ -144,6 +152,55 @@ def print_check(prefix: str, label: str, ok: bool, detail: str, suggestions: lis
             print(f"{prefix}   fix: {suggestion}")
 
 
+def format_next_steps(context: HostContext, failed_results: list[CheckResult]) -> list[str]:
+    ordered_steps: list[str] = []
+    seen: set[str] = set()
+
+    for result in failed_results:
+        for suggestion in result.suggestions:
+            if suggestion not in seen:
+                seen.add(suggestion)
+                ordered_steps.append(suggestion)
+
+    if any(result.label == "ZEPHYR_BASE" for result in failed_results):
+        if context.platform_name == "windows":
+            suggestion = "after fixing host tools, set ZEPHYR_BASE in the current PowerShell and rerun the host check"
+        else:
+            suggestion = "after fixing host tools, export ZEPHYR_BASE in the current shell and rerun the host check"
+        if suggestion not in seen:
+            ordered_steps.append(suggestion)
+
+    rerun_step = "rerun: python scripts/build_zephyr.py check-host-env"
+    if context.platform_name in {"linux", "wsl", "macos"}:
+        rerun_step = "rerun: python3 scripts/build_zephyr.py check-host-env"
+    if rerun_step not in seen:
+        ordered_steps.append(rerun_step)
+
+    configure_step = "then run: python scripts/build_zephyr.py configure"
+    if context.platform_name in {"linux", "wsl", "macos"}:
+        configure_step = "then run: python3 scripts/build_zephyr.py configure"
+    if configure_step not in seen:
+        ordered_steps.append(configure_step)
+
+    return ordered_steps
+
+
+def print_summary(prefix: str, context: HostContext, failed_results: list[CheckResult]) -> None:
+    if not failed_results:
+        ready_next = "python scripts/build_zephyr.py configure"
+        if context.platform_name in {"linux", "wsl", "macos"}:
+            ready_next = "python3 scripts/build_zephyr.py configure"
+        print(f"{prefix} summary:")
+        print(f"{prefix}   required checks passed")
+        print(f"{prefix}   next: {ready_next}")
+        return
+
+    print(f"{prefix} summary:")
+    print(f"{prefix}   missing required items: {', '.join(result.label for result in failed_results)}")
+    for step in format_next_steps(context, failed_results):
+        print(f"{prefix}   next: {step}")
+
+
 def current_python_version_command(context: HostContext) -> list[str]:
     return [context.python_executable, "--version"]
 
@@ -164,7 +221,7 @@ def main() -> int:
     print(f"{prefix} host={context.platform_name}")
     print(f"{prefix} python={context.python_executable}")
 
-    failures = 0
+    failed_results: list[CheckResult] = []
 
     if args.mode == "linux-like" and context.platform_name not in {"linux", "wsl"}:
         print(f"{prefix} warning: linux-like mode requested on host={context.platform_name}")
@@ -180,9 +237,12 @@ def main() -> int:
 
     for label, command in checks:
         ok, detail = run_check(command)
-        print_check(prefix, label, ok, detail, suggestions_for(context, label, detail))
+        suggestions = suggestions_for(context, label, detail)
+        print_check(prefix, label, ok, detail, suggestions)
         if not ok:
-            failures += 1
+            failed_results.append(
+                CheckResult(label=label, ok=ok, detail=detail, suggestions=suggestions)
+            )
 
     zephyr_base = os.environ.get("ZEPHYR_BASE", "").strip()
     if zephyr_base:
@@ -196,17 +256,32 @@ def main() -> int:
             suggestions_for(context, "ZEPHYR_BASE", detail),
         )
         if not exists:
-            failures += 1
+            failed_results.append(
+                CheckResult(
+                    label="ZEPHYR_BASE",
+                    ok=False,
+                    detail=detail,
+                    suggestions=suggestions_for(context, "ZEPHYR_BASE", detail),
+                )
+            )
     else:
         detail = "environment variable is not set"
+        suggestions = suggestions_for(context, "ZEPHYR_BASE", detail)
         print_check(
             prefix,
             "ZEPHYR_BASE",
             False,
             detail,
-            suggestions_for(context, "ZEPHYR_BASE", detail),
+            suggestions,
         )
-        failures += 1
+        failed_results.append(
+            CheckResult(
+                label="ZEPHYR_BASE",
+                ok=False,
+                detail=detail,
+                suggestions=suggestions,
+            )
+        )
 
     sdk_dir = os.environ.get("ZEPHYR_SDK_INSTALL_DIR", "").strip()
     if sdk_dir:
@@ -224,7 +299,9 @@ def main() -> int:
     else:
         print(f"{prefix} mklittlefs: optional - not found, python fallback may still work")
 
-    if failures:
+    print_summary(prefix, context, failed_results)
+
+    if failed_results:
         print(
             f"{prefix} result: not ready - fix the missing required items above before running "
             "the Zephyr build flow"
