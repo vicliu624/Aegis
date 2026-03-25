@@ -140,7 +140,7 @@ ZephyrBoardBackendConfig make_device_a_backend_config() {
         .rotary_a_pin = -1,
         .rotary_b_pin = -1,
         .rotary_center_pin = -1,
-        .shared_spi_quiesce_pins = {-1, -1, -1, -1, -1, -1},
+        .coordination_quiesce_pins = {-1, -1, -1, -1, -1, -1},
         .notes = "bootstrap Zephyr device A profile with joystick-oriented shell surface",
     };
 }
@@ -204,7 +204,7 @@ ZephyrBoardBackendConfig make_device_b_backend_config() {
         .rotary_a_pin = -1,
         .rotary_b_pin = -1,
         .rotary_center_pin = -1,
-        .shared_spi_quiesce_pins = {-1, -1, -1, -1, -1, -1},
+        .coordination_quiesce_pins = {-1, -1, -1, -1, -1, -1},
         .notes = "bootstrap Zephyr device B profile with keyboard-dominant shell surface",
     };
 }
@@ -268,7 +268,7 @@ ZephyrBoardBackendConfig make_tlora_pager_sx1262_backend_config() {
         .rotary_a_pin = 40,
         .rotary_b_pin = 41,
         .rotary_center_pin = 7,
-        .shared_spi_quiesce_pins = {21, 36, 39, 47, -1, -1},
+        .coordination_quiesce_pins = {21, 36, 39, 47, -1, -1},
         .notes =
             "T-LoRa-Pager SX1262 profile mapped from hardware doc: ST7796 480x222 display, "
             "TCA8418 keyboard, rotary encoder, UBlox GPS, SX1262 LoRa, ST25R3916 NFC, "

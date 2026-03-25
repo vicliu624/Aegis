@@ -61,7 +61,8 @@ bool ZephyrShellInputAdapter::initialize() {
                  "shell input adapter rotary=" + std::string(rotary_ready ? "ready" : "missing") +
                      " keyboard=" + std::string(keyboard_ready ? "ready" : "missing") +
                      " callback=" + std::string(callback_input_enabled_ ? "enabled" : "disabled") +
-                     " direct-mode=" + std::string(runtime_.board_direct_input_mode() ? "board" : "generic"));
+                     " backend-profile=" +
+                     std::to_string(static_cast<int>(runtime_.shell_input_backend_profile())));
     return backend_ready || rotary_ready || keyboard_ready;
 }
 

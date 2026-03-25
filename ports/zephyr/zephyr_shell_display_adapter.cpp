@@ -1096,7 +1096,8 @@ int ZephyrShellDisplayAdapter::manual_send_command(uint8_t cmd,
                                                    const uint8_t* data,
                                                    std::size_t len) const {
     if (runtime_.ready()) {
-        return runtime_.with_display_spi_client(
+        return runtime_.with_coordination_domain(
+            ZephyrBoardCoordinationDomain::DisplayPipeline,
             K_MSEC(50),
             "display.manual_send_command",
             [&]() { return manual_send_command_unlocked(cmd, data, len); });
@@ -1142,7 +1143,8 @@ int ZephyrShellDisplayAdapter::manual_send_command_unlocked(uint8_t cmd,
 
 int ZephyrShellDisplayAdapter::manual_send_data(const uint8_t* data, std::size_t len) const {
     if (runtime_.ready()) {
-        return runtime_.with_display_spi_client(
+        return runtime_.with_coordination_domain(
+            ZephyrBoardCoordinationDomain::DisplayPipeline,
             K_MSEC(50),
             "display.manual_send_data",
             [&]() { return manual_send_data_unlocked(data, len); });
@@ -1177,7 +1179,8 @@ int ZephyrShellDisplayAdapter::manual_send_data_unlocked(const uint8_t* data, st
 
 int ZephyrShellDisplayAdapter::manual_read_command(uint8_t cmd, uint8_t* data, std::size_t len) const {
     if (runtime_.ready()) {
-        return runtime_.with_display_spi_client(
+        return runtime_.with_coordination_domain(
+            ZephyrBoardCoordinationDomain::DisplayPipeline,
             K_MSEC(50),
             "display.manual_read_command",
             [&]() { return manual_read_command_unlocked(cmd, data, len); });
@@ -1309,7 +1312,8 @@ int ZephyrShellDisplayAdapter::manual_write_pixels(int x,
                                                    int height,
                                                    const std::vector<uint16_t>& pixels) const {
     if (runtime_.ready()) {
-        return runtime_.with_display_spi_client(
+        return runtime_.with_coordination_domain(
+            ZephyrBoardCoordinationDomain::DisplayPipeline,
             K_MSEC(50),
             "display.manual_write_pixels",
             [&]() { return manual_write_pixels_unlocked(x, y, width, height, pixels); });
@@ -1432,7 +1436,8 @@ int ZephyrShellDisplayAdapter::raw_write_pixels(int x,
                                                 int height,
                                                 const std::vector<uint16_t>& pixels) const {
     if (runtime_.ready()) {
-        return runtime_.with_display_spi_client(
+        return runtime_.with_coordination_domain(
+            ZephyrBoardCoordinationDomain::DisplayPipeline,
             K_MSEC(50),
             "display.raw_write_pixels",
             [&]() { return raw_write_pixels_unlocked(x, y, width, height, pixels); });
@@ -1479,7 +1484,8 @@ int ZephyrShellDisplayAdapter::raw_send_command(uint8_t cmd,
                                                 const uint8_t* data,
                                                 std::size_t len) const {
     if (runtime_.ready()) {
-        return runtime_.with_display_spi_client(
+        return runtime_.with_coordination_domain(
+            ZephyrBoardCoordinationDomain::DisplayPipeline,
             K_MSEC(50),
             "display.raw_send_command",
             [&]() { return raw_send_command_unlocked(cmd, data, len); });

@@ -33,12 +33,37 @@ bool ZephyrBoardRuntime::expander_ready() const {
     return false;
 }
 
-bool ZephyrBoardRuntime::shared_spi_ready() const {
-    return false;
+bool ZephyrBoardRuntime::coordination_domain_ready(ZephyrBoardCoordinationDomain domain) const {
+    switch (domain) {
+        case ZephyrBoardCoordinationDomain::Unknown:
+            return false;
+        default:
+            return ready();
+    }
 }
 
-std::string ZephyrBoardRuntime::shared_spi_owner_name() const {
-    return "unknown";
+std::string ZephyrBoardRuntime::coordination_domain_coordinator_name(
+    ZephyrBoardCoordinationDomain domain) const {
+    switch (domain) {
+        case ZephyrBoardCoordinationDomain::DisplayPipeline:
+            return "display-pipeline";
+        case ZephyrBoardCoordinationDomain::RadioSession:
+            return "radio-session";
+        case ZephyrBoardCoordinationDomain::StorageSession:
+            return "storage-session";
+        case ZephyrBoardCoordinationDomain::NfcSession:
+            return "nfc-session";
+        case ZephyrBoardCoordinationDomain::BoardControl:
+            return "board-control";
+        case ZephyrBoardCoordinationDomain::Unknown:
+        default:
+            return "none";
+    }
+}
+
+std::string ZephyrBoardRuntime::coordination_domain_owner_name(
+    ZephyrBoardCoordinationDomain domain) const {
+    return coordination_domain_ready(domain) ? "board-runtime" : "none";
 }
 
 bool ZephyrBoardRuntime::keyboard_ready() const {
@@ -73,8 +98,12 @@ bool ZephyrBoardRuntime::sd_card_present() const {
     return storage_ready();
 }
 
-bool ZephyrBoardRuntime::board_direct_input_mode() const {
-    return false;
+ZephyrShellDisplayBackendProfile ZephyrBoardRuntime::shell_display_backend_profile() const {
+    return ZephyrShellDisplayBackendProfile::Generic;
+}
+
+ZephyrShellInputBackendProfile ZephyrBoardRuntime::shell_input_backend_profile() const {
+    return ZephyrShellInputBackendProfile::Generic;
 }
 
 bool ZephyrBoardRuntime::keyboard_irq_asserted() const {
@@ -91,9 +120,11 @@ bool ZephyrBoardRuntime::keyboard_read_event(uint8_t& raw_event) const {
     return false;
 }
 
-int ZephyrBoardRuntime::with_display_spi_client(k_timeout_t timeout,
-                                                std::string_view operation,
-                                                const std::function<int()>& action) const {
+int ZephyrBoardRuntime::with_coordination_domain(ZephyrBoardCoordinationDomain domain,
+                                                 k_timeout_t timeout,
+                                                 std::string_view operation,
+                                                 const std::function<int()>& action) const {
+    (void)domain;
     (void)timeout;
     (void)operation;
     if (action == nullptr) {

@@ -28,8 +28,16 @@ std::string ZephyrStorageService::describe_backend() const {
         runtime->config().backend_id == config_.backend_id) {
         return std::string("zephyr-board-storage:mount=") + mount_root_ +
                ",power=" + (runtime->storage_ready() ? "ready" : "gated") +
-               ",shared-spi=" + (runtime->shared_spi_ready() ? "ready" : "missing") +
-               ",owner=" + runtime->shared_spi_owner_name() +
+               ",coordination-domain=" +
+                   (runtime->coordination_domain_ready(ports::zephyr::ZephyrBoardCoordinationDomain::StorageSession)
+                        ? "ready"
+                        : "missing") +
+               ",coordinator=" +
+                   runtime->coordination_domain_coordinator_name(
+                       ports::zephyr::ZephyrBoardCoordinationDomain::StorageSession) +
+               ",owner=" +
+                   runtime->coordination_domain_owner_name(
+                       ports::zephyr::ZephyrBoardCoordinationDomain::StorageSession) +
                ",sd-present=" + (runtime->sd_card_present() ? "1" : "0");
     }
     return available() ? "zephyr-fs:" + mount_root_ : "zephyr-fs-unavailable:" + mount_root_;

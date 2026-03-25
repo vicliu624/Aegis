@@ -63,7 +63,7 @@ struct ZephyrBoardBackendConfig {
     int rotary_a_pin {-1};
     int rotary_b_pin {-1};
     int rotary_center_pin {-1};
-    std::array<int, 6> shared_spi_quiesce_pins {-1, -1, -1, -1, -1, -1};
+    std::array<int, 6> coordination_quiesce_pins {-1, -1, -1, -1, -1, -1};
     std::string notes;
 };
 

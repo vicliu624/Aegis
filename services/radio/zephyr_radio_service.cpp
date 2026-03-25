@@ -25,8 +25,16 @@ std::string ZephyrRadioService::backend_name() const {
         runtime->config().backend_id == config_.backend_id) {
         return std::string("zephyr-board-radio:device=") + config_.radio_device_name +
                ",power=" + (runtime->radio_ready() ? "ready" : "gated") +
-               ",shared-spi=" + (runtime->shared_spi_ready() ? "ready" : "missing") +
-               ",owner=" + runtime->shared_spi_owner_name() +
+               ",coordination-domain=" +
+                   (runtime->coordination_domain_ready(ports::zephyr::ZephyrBoardCoordinationDomain::RadioSession)
+                        ? "ready"
+                        : "missing") +
+               ",coordinator=" +
+                   runtime->coordination_domain_coordinator_name(
+                       ports::zephyr::ZephyrBoardCoordinationDomain::RadioSession) +
+               ",owner=" +
+                   runtime->coordination_domain_owner_name(
+                       ports::zephyr::ZephyrBoardCoordinationDomain::RadioSession) +
                ",expander=" + (runtime->expander_ready() ? "ready" : "missing");
     }
     return available() ? "zephyr-device:" + config_.radio_device_name

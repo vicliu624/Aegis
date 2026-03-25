@@ -419,8 +419,10 @@ bool PagerDisplayBackend::raw_backend_ready() const {
 
 int PagerDisplayBackend::manual_send_command(uint8_t cmd, const uint8_t* data, std::size_t len) const {
     if (runtime_.ready()) {
-        return runtime_.with_display_spi_client(K_MSEC(50), "display.manual_send_command",
-                                                [&]() { return manual_send_command_unlocked(cmd, data, len); });
+    return runtime_.with_coordination_domain(ZephyrBoardCoordinationDomain::DisplayPipeline,
+                                             K_MSEC(50),
+                                             "display.manual_send_command",
+                                             [&]() { return manual_send_command_unlocked(cmd, data, len); });
     }
     return manual_send_command_unlocked(cmd, data, len);
 }
@@ -448,8 +450,10 @@ int PagerDisplayBackend::manual_send_command_unlocked(uint8_t cmd, const uint8_t
 
 int PagerDisplayBackend::manual_write_pixels(int x, int y, int width, int height, const std::vector<uint16_t>& pixels) const {
     if (runtime_.ready()) {
-        return runtime_.with_display_spi_client(K_MSEC(50), "display.manual_write_pixels",
-                                                [&]() { return manual_write_pixels_unlocked(x, y, width, height, pixels); });
+    return runtime_.with_coordination_domain(ZephyrBoardCoordinationDomain::DisplayPipeline,
+                                             K_MSEC(50),
+                                             "display.manual_write_pixels",
+                                             [&]() { return manual_write_pixels_unlocked(x, y, width, height, pixels); });
     }
     return manual_write_pixels_unlocked(x, y, width, height, pixels);
 }
@@ -500,8 +504,10 @@ int PagerDisplayBackend::manual_write_pixels_unlocked(int x, int y, int width, i
 
 int PagerDisplayBackend::raw_send_command(uint8_t cmd, const uint8_t* data, std::size_t len) const {
     if (runtime_.ready()) {
-        return runtime_.with_display_spi_client(K_MSEC(50), "display.raw_send_command",
-                                                [&]() { return raw_send_command_unlocked(cmd, data, len); });
+    return runtime_.with_coordination_domain(ZephyrBoardCoordinationDomain::DisplayPipeline,
+                                             K_MSEC(50),
+                                             "display.raw_send_command",
+                                             [&]() { return raw_send_command_unlocked(cmd, data, len); });
     }
     return raw_send_command_unlocked(cmd, data, len);
 }
@@ -531,8 +537,10 @@ int PagerDisplayBackend::raw_set_cursor(uint16_t x, uint16_t y, uint16_t width, 
 
 int PagerDisplayBackend::raw_write_pixels(int x, int y, int width, int height, const std::vector<uint16_t>& pixels) const {
     if (runtime_.ready()) {
-        return runtime_.with_display_spi_client(K_MSEC(50), "display.raw_write_pixels",
-                                                [&]() { return raw_write_pixels_unlocked(x, y, width, height, pixels); });
+    return runtime_.with_coordination_domain(ZephyrBoardCoordinationDomain::DisplayPipeline,
+                                             K_MSEC(50),
+                                             "display.raw_write_pixels",
+                                             [&]() { return raw_write_pixels_unlocked(x, y, width, height, pixels); });
     }
     return raw_write_pixels_unlocked(x, y, width, height, pixels);
 }
@@ -591,10 +599,13 @@ std::unique_ptr<IZephyrShellDisplayBackend> make_zephyr_shell_display_backend(
     platform::Logger& logger,
     ZephyrBoardRuntime& runtime,
     ZephyrBoardBackendConfig config) {
-    if (runtime.config().backend_id == "zephyr_tlora_pager_sx1262") {
-        return std::make_unique<PagerDisplayBackend>(logger, runtime, std::move(config));
+    switch (runtime.shell_display_backend_profile()) {
+        case ZephyrShellDisplayBackendProfile::Pager:
+            return std::make_unique<PagerDisplayBackend>(logger, runtime, std::move(config));
+        case ZephyrShellDisplayBackendProfile::Generic:
+        default:
+            return std::make_unique<GenericDisplayBackend>(std::move(config));
     }
-    return std::make_unique<GenericDisplayBackend>(std::move(config));
 }
 
 }  // namespace aegis::ports::zephyr

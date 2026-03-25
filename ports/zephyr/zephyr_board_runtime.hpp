@@ -12,6 +12,25 @@
 
 namespace aegis::ports::zephyr {
 
+enum class ZephyrBoardCoordinationDomain : uint8_t {
+    Unknown,
+    DisplayPipeline,
+    RadioSession,
+    StorageSession,
+    NfcSession,
+    BoardControl,
+};
+
+enum class ZephyrShellDisplayBackendProfile : uint8_t {
+    Generic,
+    Pager,
+};
+
+enum class ZephyrShellInputBackendProfile : uint8_t {
+    Generic,
+    PagerDirect,
+};
+
 class ZephyrBoardRuntime {
 public:
     virtual ~ZephyrBoardRuntime() = default;
@@ -24,8 +43,11 @@ public:
     virtual void heartbeat_pulse() const = 0;
 
     [[nodiscard]] virtual bool expander_ready() const;
-    [[nodiscard]] virtual bool shared_spi_ready() const;
-    [[nodiscard]] virtual std::string shared_spi_owner_name() const;
+    [[nodiscard]] virtual bool coordination_domain_ready(ZephyrBoardCoordinationDomain domain) const;
+    [[nodiscard]] virtual std::string coordination_domain_coordinator_name(
+        ZephyrBoardCoordinationDomain domain) const;
+    [[nodiscard]] virtual std::string coordination_domain_owner_name(
+        ZephyrBoardCoordinationDomain domain) const;
     [[nodiscard]] virtual bool keyboard_ready() const;
     [[nodiscard]] virtual bool radio_ready() const;
     [[nodiscard]] virtual bool gps_ready() const;
@@ -35,13 +57,16 @@ public:
     [[nodiscard]] virtual bool hostlink_ready() const;
     [[nodiscard]] virtual bool sd_card_present() const;
 
-    [[nodiscard]] virtual bool board_direct_input_mode() const;
+    [[nodiscard]] virtual ZephyrShellDisplayBackendProfile shell_display_backend_profile() const;
+    [[nodiscard]] virtual ZephyrShellInputBackendProfile shell_input_backend_profile() const;
     [[nodiscard]] virtual bool keyboard_irq_asserted() const;
     [[nodiscard]] virtual bool keyboard_pending_event_count(uint8_t& pending) const;
     [[nodiscard]] virtual bool keyboard_read_event(uint8_t& raw_event) const;
-    [[nodiscard]] virtual int with_display_spi_client(k_timeout_t timeout,
-                                                      std::string_view operation,
-                                                      const std::function<int()>& action) const;
+    [[nodiscard]] virtual int with_coordination_domain(
+        ZephyrBoardCoordinationDomain domain,
+        k_timeout_t timeout,
+        std::string_view operation,
+        const std::function<int()>& action) const;
 };
 
 class ZephyrGenericBoardRuntime final : public ZephyrBoardRuntime {

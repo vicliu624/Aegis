@@ -454,10 +454,13 @@ std::unique_ptr<IZephyrShellInputBackend> make_zephyr_shell_input_backend(
     platform::Logger& logger,
     ZephyrBoardRuntime& runtime,
     ZephyrBoardBackendConfig config) {
-    if (runtime.board_direct_input_mode()) {
-        return std::make_unique<PagerShellInputBackend>(logger, runtime, std::move(config));
+    switch (runtime.shell_input_backend_profile()) {
+        case ZephyrShellInputBackendProfile::PagerDirect:
+            return std::make_unique<PagerShellInputBackend>(logger, runtime, std::move(config));
+        case ZephyrShellInputBackendProfile::Generic:
+        default:
+            return std::make_unique<GenericShellInputBackend>(std::move(config));
     }
-    return std::make_unique<GenericShellInputBackend>(std::move(config));
 }
 
 }  // namespace aegis::ports::zephyr

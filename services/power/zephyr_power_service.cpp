@@ -29,8 +29,32 @@ std::string ZephyrPowerService::describe_status() const {
         runtime->config().backend_id == config_.backend_id) {
         status += " board-runtime=" + std::string(runtime->ready() ? "ready" : "cold");
         status += " expander=" + std::string(runtime->expander_ready() ? "ready" : "missing");
-        status += " shared-spi=" + std::string(runtime->shared_spi_ready() ? "ready" : "missing");
-        status += " shared-spi-owner=" + runtime->shared_spi_owner_name();
+        status += " display-coordination=" +
+                  std::string(runtime->coordination_domain_ready(
+                                  ports::zephyr::ZephyrBoardCoordinationDomain::DisplayPipeline)
+                                  ? "ready"
+                                  : "missing");
+        status += " display-owner=" +
+                  runtime->coordination_domain_owner_name(
+                      ports::zephyr::ZephyrBoardCoordinationDomain::DisplayPipeline);
+        status += " radio-coordination=" +
+                  std::string(runtime->coordination_domain_ready(
+                                  ports::zephyr::ZephyrBoardCoordinationDomain::RadioSession)
+                                  ? "ready"
+                                  : "missing");
+        status += " storage-coordination=" +
+                  std::string(runtime->coordination_domain_ready(
+                                  ports::zephyr::ZephyrBoardCoordinationDomain::StorageSession)
+                                  ? "ready"
+                                  : "missing");
+        status += " board-control=" +
+                  std::string(runtime->coordination_domain_ready(
+                                  ports::zephyr::ZephyrBoardCoordinationDomain::BoardControl)
+                                  ? "ready"
+                                  : "missing");
+        status += " board-control-owner=" +
+                  runtime->coordination_domain_owner_name(
+                      ports::zephyr::ZephyrBoardCoordinationDomain::BoardControl);
         status += " radio=" + std::string(runtime->radio_ready() ? "ready" : "gated");
         status += " gps=" + std::string(runtime->gps_ready() ? "ready" : "gated");
         status += " audio=" + std::string(runtime->audio_ready() ? "ready" : "gated");
