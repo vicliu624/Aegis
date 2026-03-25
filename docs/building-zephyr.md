@@ -5,6 +5,9 @@
 This document explains the real build flow for the current Aegis Zephyr target, not just a list of
 commands.
 
+If you are starting from a new machine and want the shortest working path first, read
+[quick-start-zephyr.md](./quick-start-zephyr.md) before this document.
+
 It covers:
 
 - what gets built
@@ -138,6 +141,8 @@ That made the flow easy to forget and hard to document consistently.
 
 The driver script fixes that by giving the project one stable user-facing entrypoint for the common
 Zephyr bring-up path.
+
+For the shortest first-run command sequence, see [quick-start-zephyr.md](./quick-start-zephyr.md).
 
 ---
 

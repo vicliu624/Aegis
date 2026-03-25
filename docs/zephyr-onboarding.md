@@ -5,6 +5,9 @@
 This document is for a fresh machine that does not yet have the Aegis Zephyr build environment
 working.
 
+If you want the minimum first-run path before reading the full setup guide, start with
+[quick-start-zephyr.md](./quick-start-zephyr.md).
+
 It explains how to prepare the host so the repository build flow can run successfully, including:
 
 - Python
@@ -20,6 +23,12 @@ This is an environment preparation guide.
 
 For the actual repository build flow after the environment is ready, use
 [building-zephyr.md](./building-zephyr.md).
+
+The intended reading order for a new machine is:
+
+1. [quick-start-zephyr.md](./quick-start-zephyr.md)
+2. [zephyr-onboarding.md](./zephyr-onboarding.md)
+3. [building-zephyr.md](./building-zephyr.md)
 
 ---
 
