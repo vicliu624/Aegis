@@ -57,6 +57,7 @@ public:
 private:
     [[nodiscard]] bool acquire_devices();
     void configure_trackball_pins();
+    [[nodiscard]] bool apply_gps_device_power_state(bool enabled);
 
     platform::Logger& logger_;
     ZephyrBoardBackendConfig config_;
@@ -64,6 +65,7 @@ private:
     const struct device* i2c_device_ {nullptr};
     const struct device* adc_device_ {nullptr};
     const struct device* pwm_device_ {nullptr};
+    const struct device* gps_device_ {nullptr};
     bool initialized_ {false};
     bool touch_ready_ {false};
     bool battery_ready_ {false};

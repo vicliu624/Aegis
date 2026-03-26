@@ -40,6 +40,8 @@ public:
     void tick(uint32_t elapsed_ms);
     [[nodiscard]] std::optional<shell::ShellNavigationAction> poll_ui_action();
     void handle_touch_input_event(const input_event& event);
+    void note_user_interaction(std::string_view source = "ui_action");
+    [[nodiscard]] bool display_is_awake() const;
 
 private:
     enum class BackendKind {
@@ -147,13 +149,15 @@ private:
                            std::size_t count) const;
     [[nodiscard]] bool read_touch_from_input_cache(int16_t& x, int16_t& y, bool& pressed) const;
     void refresh_runtime_settings(bool force_log = false);
-    void register_interaction();
+    void register_interaction(std::string_view source = "unknown");
     [[nodiscard]] std::string clock_text() const;
     [[nodiscard]] ZephyrLvglShellUi::StatusIcons status_icons() const;
     [[nodiscard]] static uint8_t brightness_percent_from_value(const std::string& value);
     [[nodiscard]] static uint32_t screen_timeout_ms_from_value(const std::string& value);
     [[nodiscard]] static int timezone_offset_minutes_from_value(const std::string& value);
+    [[nodiscard]] static const char* timezone_env_from_value(const std::string& value);
     [[nodiscard]] static bool time_format_24h_from_value(const std::string& value);
+    static void apply_timezone_setting(const std::string& value);
     [[nodiscard]] uint16_t apply_brightness_to_rgb565(uint16_t rgb565) const;
 
     platform::Logger& logger_;
@@ -198,6 +202,7 @@ private:
     int timezone_offset_minutes_ {0};
     int64_t last_interaction_ms_ {0};
     int64_t last_settings_refresh_ms_ {0};
+    bool runtime_settings_applied_ {false};
     k_msgq ui_action_queue_;
     char ui_action_queue_buffer_[sizeof(shell::ShellNavigationAction) * 8] {};
 };

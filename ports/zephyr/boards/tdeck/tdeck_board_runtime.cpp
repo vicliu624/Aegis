@@ -1,8 +1,11 @@
 #include "ports/zephyr/boards/tdeck/tdeck_board_runtime.hpp"
 
+#include <cerrno>
+
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/pm/device.h>
 
 #include "ports/zephyr/zephyr_gpio_pin.hpp"
 
@@ -37,7 +40,8 @@ bool ZephyrTdeckBoardRuntime::initialize() {
                      " power-init=" + std::string(power_ready ? "ready" : "degraded") +
                      " keyboard=" + std::string(keyboard_ok ? "ready" : "missing") +
                      " touch=" + std::string(touch_ready_ ? "ready" : "missing") +
-                     " battery=" + std::string(battery_ready_ ? "ready" : "missing"));
+                     " battery=" + std::string(battery_ready_ ? "ready" : "missing") +
+                     " gps=" + std::string(gps_ready() ? "ready" : "gated"));
     return devices_ready;
 }
 
@@ -52,7 +56,8 @@ void ZephyrTdeckBoardRuntime::log_state(std::string_view stage) const {
                      " board-owner=" + board_control_provider_.owner_name() +
                      " keyboard=" + std::string(keyboard_ready() ? "ready" : "missing") +
                      " touch=" + std::string(touch_ready_ ? "ready" : "missing") +
-                     " battery=" + std::string(battery_ready_ ? "ready" : "missing"));
+                     " battery=" + std::string(battery_ready_ ? "ready" : "missing") +
+                     " gps=" + std::string(gps_ready() ? "ready" : "gated"));
 }
 
 void ZephyrTdeckBoardRuntime::signal_boot_stage(int stage) const {
@@ -117,20 +122,35 @@ int ZephyrTdeckBoardRuntime::battery_voltage_mv() const {
 }
 bool ZephyrTdeckBoardRuntime::battery_charging() const { return board_control_provider_.battery_charging(); }
 bool ZephyrTdeckBoardRuntime::radio_ready() const { return ready() && transfer_coordinator_.ready(); }
-bool ZephyrTdeckBoardRuntime::gps_ready() const { return ready() && gps_enabled_; }
+bool ZephyrTdeckBoardRuntime::gps_ready() const {
+    return ready() && gps_enabled_ && gps_device_ != nullptr && device_is_ready(gps_device_);
+}
 bool ZephyrTdeckBoardRuntime::storage_ready() const { return ready() && transfer_coordinator_.ready() && config_.removable_storage; }
 bool ZephyrTdeckBoardRuntime::audio_ready() const { return ready(); }
 bool ZephyrTdeckBoardRuntime::hostlink_ready() const { return ready(); }
 bool ZephyrTdeckBoardRuntime::set_display_backlight_enabled(bool enabled) const {
     display_backlight_enabled_ = enabled;
-    return board_control_provider_.set_display_backlight_percent(enabled ? display_brightness_percent_ : 0);
+    const uint8_t percent = enabled ? display_brightness_percent_ : 0;
+    const bool ok = board_control_provider_.set_display_backlight_percent(percent);
+    logger_.info("board",
+                 "tdeck display backlight enabled=" + std::string(enabled ? "1" : "0") +
+                     " percent=" + std::to_string(percent) +
+                     " apply=" + std::string(ok ? "ok" : "fail"));
+    return ok;
 }
 bool ZephyrTdeckBoardRuntime::set_display_brightness_percent(uint8_t percent) const {
     display_brightness_percent_ = percent;
     if (!display_backlight_enabled_) {
+        logger_.info("board",
+                     "tdeck display brightness cached percent=" + std::to_string(percent) +
+                         " apply=deferred");
         return true;
     }
-    return board_control_provider_.set_display_backlight_percent(percent);
+    const bool ok = board_control_provider_.set_display_backlight_percent(percent);
+    logger_.info("board",
+                 "tdeck display brightness percent=" + std::to_string(percent) +
+                     " apply=" + std::string(ok ? "ok" : "fail"));
+    return ok;
 }
 bool ZephyrTdeckBoardRuntime::set_keyboard_backlight_enabled(bool enabled) const {
     return board_control_provider_.set_keyboard_backlight_level(enabled ? 127 : 0);
@@ -139,8 +159,15 @@ bool ZephyrTdeckBoardRuntime::set_gps_enabled(bool enabled) {
     if (gps_enabled_ == enabled) {
         return true;
     }
+
+    const bool applied = apply_gps_device_power_state(enabled);
+    if (!applied) {
+        logger_.info("board",
+                     "tdeck gps apply failed enabled=" + std::string(enabled ? "1" : "0"));
+        return false;
+    }
+
     gps_enabled_ = enabled;
-    logger_.info("board", "tdeck gps enabled=" + std::string(enabled ? "1" : "0"));
     return true;
 }
 bool ZephyrTdeckBoardRuntime::gps_enabled() const { return gps_enabled_; }
@@ -182,6 +209,7 @@ bool ZephyrTdeckBoardRuntime::acquire_devices() {
 #if DT_NODE_EXISTS(DT_NODELABEL(ledc0))
     pwm_device_ = DEVICE_DT_GET(DT_NODELABEL(ledc0));
 #endif
+    gps_device_ = device_get_binding(config_.gps_device_name.c_str());
     transfer_coordinator_.bind_gpio_device(gpio_device_);
     board_control_provider_.bind_gpio_device(gpio_device_);
     board_control_provider_.bind_i2c_device(i2c_device_);
@@ -192,7 +220,8 @@ bool ZephyrTdeckBoardRuntime::acquire_devices() {
                  "tdeck device acquisition gpio=" + std::string(gpio_ready ? "ready" : "missing") +
                      " i2c=" + std::string(i2c_device_ != nullptr && device_is_ready(i2c_device_) ? "ready" : "missing") +
                      " adc=" + std::string(adc_device_ != nullptr && device_is_ready(adc_device_) ? "ready" : "missing") +
-                     " pwm=" + std::string(pwm_device_ != nullptr && device_is_ready(pwm_device_) ? "ready" : "missing"));
+                     " pwm=" + std::string(pwm_device_ != nullptr && device_is_ready(pwm_device_) ? "ready" : "missing") +
+                     " gps=" + std::string(gps_device_ != nullptr && device_is_ready(gps_device_) ? "ready" : "missing"));
     return gpio_ready;
 }
 
@@ -220,6 +249,47 @@ void ZephyrTdeckBoardRuntime::configure_trackball_pins() {
                          "tdeck touch irq configured pin=" + std::to_string(config_.touch_irq_pin));
         }
     }
+}
+
+bool ZephyrTdeckBoardRuntime::apply_gps_device_power_state(bool enabled) {
+    if (gps_device_ == nullptr || !device_is_ready(gps_device_)) {
+        logger_.info("board",
+                     "tdeck gps device missing name=" + config_.gps_device_name +
+                         " enabled=" + std::string(enabled ? "1" : "0") +
+                         " mode=logical-only");
+        return true;
+    }
+
+#if defined(CONFIG_PM_DEVICE)
+    const auto action = enabled ? PM_DEVICE_ACTION_RESUME : PM_DEVICE_ACTION_SUSPEND;
+    const int rc = pm_device_action_run(gps_device_, action);
+    if (rc == 0) {
+        logger_.info("board",
+                     "tdeck gps device action=" +
+                         std::string(enabled ? "resume" : "suspend") +
+                         " name=" + gps_device_->name + " rc=0");
+        return true;
+    }
+
+    if (rc == -ENOTSUP || rc == -ENOSYS) {
+        logger_.info("board",
+                     "tdeck gps device action unsupported name=" + std::string(gps_device_->name) +
+                         " rc=" + std::to_string(rc) + " mode=logical-only");
+        return true;
+    }
+
+    logger_.info("board",
+                 "tdeck gps device action failed name=" + std::string(gps_device_->name) +
+                     " action=" + std::string(enabled ? "resume" : "suspend") +
+                     " rc=" + std::to_string(rc));
+    return false;
+#else
+    logger_.info("board",
+                 "tdeck gps device name=" + std::string(gps_device_->name) +
+                     " enabled=" + std::string(enabled ? "1" : "0") +
+                     " mode=logical-only reason=pm-device-disabled");
+    return true;
+#endif
 }
 
 ZephyrTdeckBoardRuntime& tdeck_board_runtime(platform::Logger& logger) {

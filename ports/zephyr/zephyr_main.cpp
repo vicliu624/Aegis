@@ -252,11 +252,30 @@ extern "C" int main(void) {
     int heartbeat_ticks = 0;
     int loop_heartbeats = 0;
     while (true) {
+        const bool display_awake = display_adapter.display_is_awake();
         if (const auto ui_action = display_adapter.poll_ui_action(); ui_action.has_value()) {
+            if (!display_awake) {
+                boot_logger.info("power",
+                                 "ignore ui wake action=" +
+                                     std::string(aegis::shell::to_string(*ui_action)));
+            } else {
             core.run_shell_action_sequence({*ui_action});
+            }
         }
         if (const auto action = input_adapter.poll_action(); action.has_value()) {
-            core.run_shell_action_sequence({*action});
+            if (!display_awake) {
+                if (*action == aegis::shell::ShellNavigationAction::Select) {
+                    display_adapter.note_user_interaction("select_wake");
+                    boot_logger.info("power", "wake accepted source=select");
+                } else {
+                    boot_logger.info("power",
+                                     "ignore sleeping input action=" +
+                                         std::string(aegis::shell::to_string(*action)));
+                }
+            } else {
+                display_adapter.note_user_interaction("input_action");
+                core.run_shell_action_sequence({*action});
+            }
         }
         display_adapter.tick(8);
         ++heartbeat_ticks;

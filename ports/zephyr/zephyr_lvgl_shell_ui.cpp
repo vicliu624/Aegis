@@ -328,6 +328,12 @@ void ZephyrLvglShellUi::sample_touch_state() {
         return;
     }
 
+    const uint32_t now_ms = lv_tick_get();
+    if (!cached_touch_pressed_ && last_touch_poll_ms_ != 0 && (now_ms - last_touch_poll_ms_) < 16U) {
+        return;
+    }
+    last_touch_poll_ms_ = now_ms;
+
     int16_t x = 0;
     int16_t y = 0;
     bool pressed = false;
@@ -344,13 +350,6 @@ void ZephyrLvglShellUi::sample_touch_state() {
     }
     cached_touch_pressed_ = pressed;
     cached_touch_valid_ = true;
-    const uint32_t now_ms = lv_tick_get();
-    if (pressed && (last_touch_sample_log_ms_ == 0 || (now_ms - last_touch_sample_log_ms_) >= 120)) {
-        last_touch_sample_log_ms_ = now_ms;
-        logger_.info("lvgl",
-                     "touch sample x=" + std::to_string(x) + " y=" + std::to_string(y) +
-                         " pressed=1");
-    }
 }
 
 void ZephyrLvglShellUi::ensure_theme() {

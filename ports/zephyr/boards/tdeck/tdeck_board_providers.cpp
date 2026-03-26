@@ -307,7 +307,8 @@ bool ZephyrTdeckBoardControlProvider::initialize_power_and_backlights() {
                                                     true,
                                                     TdeckPowerChannel::KeyboardBacklight);
                                } else {
-                                   power_state_[power_channel_index(TdeckPowerChannel::KeyboardBacklight)] = true;
+                                   power_state_[power_channel_index(TdeckPowerChannel::KeyboardBacklight)] =
+                                       keyboard_backlight_level_ > 0;
                                }
                                k_sleep(K_MSEC(50));
                                return ok ? 0 : -EIO;
@@ -332,8 +333,8 @@ bool ZephyrTdeckBoardControlProvider::probe_keyboard_controller() {
     }
 
     uint8_t mode_cmd[] = {kTdeckKeyboardModeKeyCmd};
-    uint8_t default_brightness[] = {kTdeckKeyboardDefaultBrightnessCmd, 127};
-    uint8_t brightness[] = {kTdeckKeyboardBrightnessCmd, 127};
+    uint8_t default_brightness[] = {kTdeckKeyboardDefaultBrightnessCmd, keyboard_backlight_level_};
+    uint8_t brightness[] = {kTdeckKeyboardBrightnessCmd, keyboard_backlight_level_};
     (void)with_participant(TdeckBoardControlParticipant::Keyboard,
                            K_MSEC(50),
                            "keyboard.init",
@@ -343,9 +344,9 @@ bool ZephyrTdeckBoardControlProvider::probe_keyboard_controller() {
                                (void)i2c_write(i2c_device_, brightness, sizeof(brightness), kTdeckKeyboardAddress);
                                return 0;
                            });
-    keyboard_backlight_level_ = 127;
-    power_state_[power_channel_index(TdeckPowerChannel::KeyboardBacklight)] = true;
     keyboard_ready_ = true;
+    power_state_[power_channel_index(TdeckPowerChannel::KeyboardBacklight)] =
+        keyboard_backlight_level_ > 0;
     return true;
 }
 
@@ -434,8 +435,6 @@ bool ZephyrTdeckBoardControlProvider::read_touch_point(int16_t& x, int16_t& y, b
         return false;
     }
 
-    const uint32_t now_ms = k_uptime_get_32();
-
     uint8_t status = 0;
     const uint8_t status_reg[2] = {
         static_cast<uint8_t>((kTdeckTouchStatusRegister >> 8) & 0xFF),
@@ -462,7 +461,6 @@ bool ZephyrTdeckBoardControlProvider::read_touch_point(int16_t& x, int16_t& y, b
             irq_level = gpio_pin_get(irq_ref.device, irq_ref.pin);
         }
     }
-    last_touch_poll_log_ms_ = now_ms;
     last_touch_status_ = status;
     last_touch_irq_level_ = irq_level;
 
@@ -499,8 +497,6 @@ bool ZephyrTdeckBoardControlProvider::read_touch_point(int16_t& x, int16_t& y, b
     const uint8_t track_id = point[0];
     const int16_t raw_x = static_cast<int16_t>((static_cast<uint16_t>(point[2]) << 8) | point[1]);
     const int16_t raw_y = static_cast<int16_t>((static_cast<uint16_t>(point[4]) << 8) | point[3]);
-    const uint16_t touch_size = static_cast<uint16_t>((static_cast<uint16_t>(point[6]) << 8) | point[5]);
-
     const bool coordinates_look_valid =
         raw_x >= 0 && raw_y >= 0 && raw_x < 512 && raw_y < 512 && !(raw_x == 0 && raw_y == 0 && track_id == 0);
     if (!coordinates_look_valid && !irq_asserted && touch_count == 0) {
@@ -514,12 +510,6 @@ bool ZephyrTdeckBoardControlProvider::read_touch_point(int16_t& x, int16_t& y, b
     x = mapped_x;
     y = mapped_y;
     pressed = true;
-    logger_.info("board",
-                 "touch point track=" + std::to_string(track_id) +
-                     " raw=" + std::to_string(raw_x) + "," + std::to_string(raw_y) +
-                     " mapped=" + std::to_string(mapped_x) + "," + std::to_string(mapped_y) +
-                     " size=" + std::to_string(touch_size) +
-                     " status=0x" + hex_u32(status));
     return true;
 }
 
@@ -671,13 +661,28 @@ bool ZephyrTdeckBoardControlProvider::set_keyboard_backlight_level(uint8_t level
 
 bool ZephyrTdeckBoardControlProvider::set_display_backlight_percent_unlocked(uint8_t percent) const {
     display_backlight_percent_ = percent;
+    bool gpio_ok = true;
+    if (config_.display_backlight_pin >= 0) {
+        const auto pin_ref = resolve_gpio_pin(config_.display_backlight_pin);
+        if (pin_ref.device != nullptr && device_is_ready(pin_ref.device)) {
+            const int gpio_rc = gpio_pin_set(pin_ref.device, pin_ref.pin, percent > 0 ? 1 : 0);
+            gpio_ok = gpio_rc == 0;
+            logger_.info("board",
+                         "display backlight gpio rc=" + std::to_string(gpio_rc) +
+                             " percent=" + std::to_string(percent));
+        }
+    }
+
     if (pwm_device_ != nullptr && device_is_ready(pwm_device_)) {
         const uint32_t pulse_ns =
             (static_cast<uint32_t>(percent) * kTdeckDisplayBacklightPeriodNs) / 100U;
         const int rc = pwm_set(pwm_device_, 0, kTdeckDisplayBacklightPeriodNs, pulse_ns, 0);
         if (rc == 0) {
             power_state_[power_channel_index(TdeckPowerChannel::DisplayBacklight)] = percent > 0;
-            return true;
+            logger_.info("board",
+                         "display backlight pwm rc=0 percent=" + std::to_string(percent) +
+                             " pulse-ns=" + std::to_string(pulse_ns));
+            return gpio_ok;
         }
         logger_.info("board",
                      "display backlight pwm set failed rc=" + std::to_string(rc) +
@@ -695,8 +700,13 @@ bool ZephyrTdeckBoardControlProvider::set_display_backlight_percent_unlocked(uin
     const int rc = gpio_pin_set(pin_ref.device, pin_ref.pin, enabled ? 1 : 0);
     if (rc == 0) {
         power_state_[power_channel_index(TdeckPowerChannel::DisplayBacklight)] = enabled;
+        logger_.info("board",
+                     "display backlight gpio-only rc=0 percent=" + std::to_string(percent));
         return true;
     }
+    logger_.info("board",
+                 "display backlight gpio-only failed rc=" + std::to_string(rc) +
+                     " percent=" + std::to_string(percent));
     return false;
 }
 

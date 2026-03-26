@@ -94,7 +94,7 @@ private:
         const auto pin_ref = resolve_gpio_pin(pin);
         spec = {.port = pin_ref.device, .pin = static_cast<gpio_pin_t>(pin_ref.pin), .dt_flags = 0};
         if (spec.port != nullptr && device_is_ready(spec.port)) {
-            (void)gpio_pin_configure_dt(&spec, GPIO_INPUT);
+            (void)gpio_pin_configure_dt(&spec, GPIO_INPUT | GPIO_PULL_UP);
         } else {
             spec = {};
         }

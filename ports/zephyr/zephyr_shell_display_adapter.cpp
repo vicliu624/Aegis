@@ -4,6 +4,7 @@
 #include <array>
 #include <cerrno>
 #include <cctype>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -22,6 +23,11 @@
 #include "ports/zephyr/zephyr_gpio_pin.hpp"
 
 namespace aegis::ports::zephyr {
+
+#if !defined(_WIN32)
+extern "C" int setenv(const char* name, const char* value, int overwrite);
+extern "C" void tzset(void);
+#endif
 
 namespace {
 
@@ -331,12 +337,16 @@ bool ZephyrShellDisplayAdapter::initialize() {
 std::optional<shell::ShellNavigationAction> ZephyrShellDisplayAdapter::poll_ui_action() {
     shell::ShellNavigationAction action {};
     if (k_msgq_get(&ui_action_queue_, &action, K_NO_WAIT) == 0) {
+        note_user_interaction("ui_action");
         return action;
     }
     return std::nullopt;
 }
 
 void ZephyrShellDisplayAdapter::handle_touch_input_event(const input_event& event) {
+    if (config_.profile_device_id == "lilygo-tdeck-sx1262") {
+        return;
+    }
     if (touch_input_device_ == nullptr || event.dev != touch_input_device_) {
         return;
     }
@@ -364,7 +374,7 @@ void ZephyrShellDisplayAdapter::handle_touch_input_event(const input_event& even
         touch_input_seen_ = true;
         touch_input_pressed_ = event.value != 0;
         (void)k_mutex_unlock(&touch_input_mutex_);
-        register_interaction();
+        register_interaction("touch_key");
     }
 }
 
@@ -627,7 +637,6 @@ void ZephyrShellDisplayAdapter::present(const shell::ShellPresentationFrame& fra
     }
 
     refresh_runtime_settings(true);
-    register_interaction();
     if (lvgl_ui_ != nullptr) {
         lvgl_ui_->present(frame);
         last_surface_valid_ = true;
@@ -680,6 +689,14 @@ void ZephyrShellDisplayAdapter::present(const shell::ShellPresentationFrame& fra
     log_frame(frame);
 }
 
+void ZephyrShellDisplayAdapter::note_user_interaction(std::string_view source) {
+    register_interaction(source);
+}
+
+bool ZephyrShellDisplayAdapter::display_is_awake() const {
+    return display_backlight_enabled_;
+}
+
 void ZephyrShellDisplayAdapter::tick(uint32_t elapsed_ms) {
     refresh_runtime_settings();
     if (lvgl_ui_ != nullptr) {
@@ -689,11 +706,16 @@ void ZephyrShellDisplayAdapter::tick(uint32_t elapsed_ms) {
 
 void ZephyrShellDisplayAdapter::refresh_runtime_settings(bool force_log) {
     const int64_t now_ms = k_uptime_get();
-    if (!force_log && last_settings_refresh_ms_ != 0 && (now_ms - last_settings_refresh_ms_) < 5000) {
+    if (!force_log && last_settings_refresh_ms_ != 0 && (now_ms - last_settings_refresh_ms_) < 250) {
         if (screen_timeout_ms_ > 0) {
             const bool should_enable = (now_ms - last_interaction_ms_) < static_cast<int64_t>(screen_timeout_ms_);
             if (should_enable != display_backlight_enabled_) {
                 display_backlight_enabled_ = should_enable;
+                logger_.info("power",
+                             "display timeout fast-path enabled=" +
+                                 std::string(should_enable ? "1" : "0") +
+                                 " idle-ms=" + std::to_string(now_ms - last_interaction_ms_) +
+                                 " timeout-ms=" + std::to_string(screen_timeout_ms_));
                 (void)runtime_.set_display_backlight_enabled(display_backlight_enabled_);
                 (void)runtime_.set_keyboard_backlight_enabled(display_backlight_enabled_ &&
                                                               keyboard_backlight_enabled_);
@@ -704,7 +726,7 @@ void ZephyrShellDisplayAdapter::refresh_runtime_settings(bool force_log) {
     last_settings_refresh_ms_ = now_ms;
 
     const auto brightness_value =
-        ui_settings_.find("builtin.settings.screen_brightness").value_or(std::string("100%"));
+        ui_settings_.find("builtin.settings.screen_brightness").value_or(std::string("80%"));
     const auto keyboard_value =
         ui_settings_.find("builtin.settings.keyboard_backlight").value_or(std::string("On"));
     const auto timeout_value =
@@ -718,27 +740,79 @@ void ZephyrShellDisplayAdapter::refresh_runtime_settings(bool force_log) {
     const auto time_format_value =
         ui_settings_.find("builtin.settings.time_format").value_or(std::string("24-hour"));
 
-    brightness_percent_ = brightness_percent_from_value(brightness_value);
-    keyboard_backlight_enabled_ = keyboard_value != "Off";
-    bluetooth_enabled_ = bluetooth_value == "On";
-    gps_enabled_ = gps_value != "Off";
-    screen_timeout_ms_ = screen_timeout_ms_from_value(timeout_value);
-    timezone_offset_minutes_ = timezone_offset_minutes_from_value(timezone_value);
-    time_format_24h_ = time_format_24h_from_value(time_format_value);
+    const uint8_t next_brightness_percent = brightness_percent_from_value(brightness_value);
+    const bool next_keyboard_backlight_enabled = keyboard_value != "Off";
+    const bool next_bluetooth_enabled = bluetooth_value == "On";
+    const bool next_gps_enabled = gps_value != "Off";
+    const uint32_t next_screen_timeout_ms = screen_timeout_ms_from_value(timeout_value);
+    const int next_timezone_offset_minutes = timezone_offset_minutes_from_value(timezone_value);
+    const bool next_time_format_24h = time_format_24h_from_value(time_format_value);
 
     const bool should_enable_display =
-        screen_timeout_ms_ == 0 || (now_ms - last_interaction_ms_) < static_cast<int64_t>(screen_timeout_ms_);
-    if (should_enable_display != display_backlight_enabled_) {
-        display_backlight_enabled_ = should_enable_display;
-        (void)runtime_.set_display_backlight_enabled(display_backlight_enabled_);
+        next_screen_timeout_ms == 0 ||
+        (now_ms - last_interaction_ms_) < static_cast<int64_t>(next_screen_timeout_ms);
+
+    const bool apply_all = !runtime_settings_applied_;
+    const bool brightness_changed = apply_all || brightness_percent_ != next_brightness_percent;
+    const bool keyboard_setting_changed =
+        apply_all || keyboard_backlight_enabled_ != next_keyboard_backlight_enabled;
+    const bool bluetooth_changed = apply_all || bluetooth_enabled_ != next_bluetooth_enabled;
+    const bool gps_changed = apply_all || gps_enabled_ != next_gps_enabled;
+    const bool timeout_changed = apply_all || screen_timeout_ms_ != next_screen_timeout_ms;
+    const bool timezone_changed = apply_all || timezone_offset_minutes_ != next_timezone_offset_minutes;
+    const bool display_power_changed = apply_all || display_backlight_enabled_ != should_enable_display;
+
+    brightness_percent_ = next_brightness_percent;
+    keyboard_backlight_enabled_ = next_keyboard_backlight_enabled;
+    bluetooth_enabled_ = next_bluetooth_enabled;
+    gps_enabled_ = next_gps_enabled;
+    screen_timeout_ms_ = next_screen_timeout_ms;
+    timezone_offset_minutes_ = next_timezone_offset_minutes;
+    time_format_24h_ = next_time_format_24h;
+
+    if (timezone_changed) {
+        apply_timezone_setting(timezone_value);
     }
-    (void)runtime_.set_display_brightness_percent(static_cast<uint8_t>(brightness_percent_));
-    (void)runtime_.set_keyboard_backlight_enabled(display_backlight_enabled_ &&
-                                                  keyboard_backlight_enabled_);
-    const bool bluetooth_apply_ok = runtime_.set_bluetooth_enabled(bluetooth_enabled_);
-    bluetooth_enabled_ = runtime_.bluetooth_enabled();
-    const bool gps_apply_ok = runtime_.set_gps_enabled(gps_enabled_);
-    gps_enabled_ = runtime_.gps_enabled();
+
+    if (display_power_changed) {
+        display_backlight_enabled_ = should_enable_display;
+        logger_.info("power",
+                     "display timeout transition enabled=" +
+                         std::string(should_enable_display ? "1" : "0") +
+                         " idle-ms=" + std::to_string(now_ms - last_interaction_ms_) +
+                         " timeout-ms=" + std::to_string(next_screen_timeout_ms));
+        (void)runtime_.set_display_backlight_enabled(should_enable_display);
+    } else {
+        display_backlight_enabled_ = should_enable_display;
+    }
+    if (brightness_changed) {
+        (void)runtime_.set_display_brightness_percent(static_cast<uint8_t>(brightness_percent_));
+    }
+    if (display_power_changed || keyboard_setting_changed || timeout_changed) {
+        (void)runtime_.set_keyboard_backlight_enabled(display_backlight_enabled_ &&
+                                                      keyboard_backlight_enabled_);
+    }
+    bool bluetooth_apply_ok = true;
+    if (bluetooth_changed) {
+        bluetooth_apply_ok = runtime_.set_bluetooth_enabled(bluetooth_enabled_);
+        bluetooth_enabled_ = runtime_.bluetooth_enabled();
+    } else {
+        bluetooth_enabled_ = runtime_.bluetooth_enabled();
+    }
+    bool gps_apply_ok = true;
+    if (gps_changed) {
+        gps_apply_ok = runtime_.set_gps_enabled(gps_enabled_);
+        gps_enabled_ = runtime_.gps_enabled();
+    } else {
+        gps_enabled_ = runtime_.gps_enabled();
+    }
+    if (bluetooth_enabled_ != next_bluetooth_enabled) {
+        ui_settings_.set("builtin.settings.bluetooth", bluetooth_enabled_ ? "On" : "Off");
+    }
+    if (gps_enabled_ != next_gps_enabled) {
+        ui_settings_.set("builtin.settings.gps", gps_enabled_ ? "On" : "Off");
+    }
+    runtime_settings_applied_ = true;
 
     if (force_log) {
         logger_.info("settings",
@@ -754,23 +828,54 @@ void ZephyrShellDisplayAdapter::refresh_runtime_settings(bool force_log) {
     }
 }
 
-void ZephyrShellDisplayAdapter::register_interaction() {
+void ZephyrShellDisplayAdapter::register_interaction(std::string_view source) {
     last_interaction_ms_ = k_uptime_get();
+    logger_.info("power",
+                 "interaction source=" + std::string(source) +
+                     " at-ms=" + std::to_string(last_interaction_ms_));
     if (!display_backlight_enabled_) {
         display_backlight_enabled_ = true;
+        logger_.info("power", "display wake due to interaction source=" + std::string(source));
         (void)runtime_.set_display_backlight_enabled(true);
+        (void)runtime_.set_keyboard_backlight_enabled(keyboard_backlight_enabled_);
     }
 }
 
 std::string ZephyrShellDisplayAdapter::clock_text() const {
-    int64_t total_minutes = 0;
     if (const auto unix_ms = time_service_.current_unix_ms();
         unix_ms.has_value() && *unix_ms >= 1577836800000LL) {
-        total_minutes = (*unix_ms / 60000LL) + static_cast<int64_t>(timezone_offset_minutes_);
-    } else {
-        total_minutes =
-            (static_cast<int64_t>(k_uptime_get()) / 60000LL) + static_cast<int64_t>(timezone_offset_minutes_);
+        const std::time_t seconds = static_cast<std::time_t>(*unix_ms / 1000LL);
+        std::tm local_tm {};
+#if defined(_WIN32)
+        if (localtime_s(&local_tm, &seconds) == 0) {
+#else
+        if (localtime_r(&seconds, &local_tm) != nullptr) {
+#endif
+            char buffer[12] {};
+            if (time_format_24h_) {
+                std::snprintf(buffer,
+                              sizeof(buffer),
+                              "%02d:%02d",
+                              local_tm.tm_hour,
+                              local_tm.tm_min);
+            } else {
+                int hour = local_tm.tm_hour % 12;
+                if (hour == 0) {
+                    hour = 12;
+                }
+                std::snprintf(buffer,
+                              sizeof(buffer),
+                              "%02d:%02d %s",
+                              hour,
+                              local_tm.tm_min,
+                              local_tm.tm_hour >= 12 ? "PM" : "AM");
+            }
+            return buffer;
+        }
     }
+
+    int64_t total_minutes =
+        (static_cast<int64_t>(k_uptime_get()) / 60000LL) + static_cast<int64_t>(timezone_offset_minutes_);
     int minute_of_day = static_cast<int>(total_minutes % (24LL * 60LL));
     if (minute_of_day < 0) {
         minute_of_day += 24 * 60;
@@ -860,8 +965,40 @@ int ZephyrShellDisplayAdapter::timezone_offset_minutes_from_value(const std::str
     return 0;
 }
 
+const char* ZephyrShellDisplayAdapter::timezone_env_from_value(const std::string& value) {
+    if (value == "UTC-08:00") {
+        return "UTC8";
+    }
+    if (value == "UTC") {
+        return "UTC0";
+    }
+    if (value == "Asia/Shanghai") {
+        return "CST-8";
+    }
+    if (value == "Asia/Tokyo") {
+        return "JST-9";
+    }
+    if (value == "Europe/Berlin") {
+        return "CET-1";
+    }
+    if (value == "America/New_York") {
+        return "EST5";
+    }
+    return "UTC0";
+}
+
 bool ZephyrShellDisplayAdapter::time_format_24h_from_value(const std::string& value) {
     return value != "12-hour";
+}
+
+void ZephyrShellDisplayAdapter::apply_timezone_setting(const std::string& value) {
+    const char* tz = timezone_env_from_value(value);
+#if defined(_WIN32)
+    _putenv_s("TZ", tz);
+#else
+    setenv("TZ", tz, 1);
+#endif
+    tzset();
 }
 
 uint16_t ZephyrShellDisplayAdapter::apply_brightness_to_rgb565(uint16_t rgb565) const {
