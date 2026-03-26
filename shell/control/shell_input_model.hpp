@@ -12,6 +12,7 @@ enum class ShellNavigationAction {
     Select,
     Back,
     OpenMenu,
+    OpenFiles,
     OpenSettings,
     OpenNotifications,
 };

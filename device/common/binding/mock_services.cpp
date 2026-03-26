@@ -70,6 +70,24 @@ bool MockStorageService::available() const {
     return available_;
 }
 
+bool MockStorageService::sd_card_present() const {
+    return available_;
+}
+
+std::string MockStorageService::mount_root() const {
+    return "/";
+}
+
+bool MockStorageService::directory_exists(const std::string& path) const {
+    return path == "/";
+}
+
+std::vector<services::StorageDirectoryEntry> MockStorageService::list_directory(
+    const std::string& path) const {
+    (void)path;
+    return {};
+}
+
 std::string MockStorageService::describe_backend() const {
     return backend_name_;
 }

@@ -135,6 +135,8 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_packages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_board_support.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_lvgl_assets.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/zephyr_lvgl_file_entry_icons_asset.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/zephyr_lvgl_files_icon_asset.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_lvgl_settings_icon_asset.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_lvgl_status_icons_asset.cpp
     ${CMAKE_CURRENT_LIST_DIR}/zephyr_lvgl_shell_ui.cpp
@@ -189,6 +191,7 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../../shell/control/shell_navigation_state.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../shell/launcher/launcher_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../services/ui/zephyr_ui_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../apps/builtin/files/files_app_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../apps/builtin/settings/settings_app_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../shell/settings/settings_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../shell/status/status_model.cpp

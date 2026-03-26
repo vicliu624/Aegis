@@ -31,6 +31,8 @@ std::string_view to_string(ShellNavigationAction action) {
             return "back";
         case ShellNavigationAction::OpenMenu:
             return "open_menu";
+        case ShellNavigationAction::OpenFiles:
+            return "open_files";
         case ShellNavigationAction::OpenSettings:
             return "open_settings";
         case ShellNavigationAction::OpenNotifications:
@@ -48,6 +50,7 @@ bool try_parse_shell_action(std::string_view value, ShellNavigationAction& actio
         ShellNavigationAction::Select,
         ShellNavigationAction::Back,
         ShellNavigationAction::OpenMenu,
+        ShellNavigationAction::OpenFiles,
         ShellNavigationAction::OpenSettings,
         ShellNavigationAction::OpenNotifications,
     };

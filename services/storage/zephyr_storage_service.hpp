@@ -13,6 +13,11 @@ public:
     ZephyrStorageService(std::string mount_root, ports::zephyr::ZephyrBoardBackendConfig config);
 
     [[nodiscard]] bool available() const override;
+    [[nodiscard]] bool sd_card_present() const override;
+    [[nodiscard]] std::string mount_root() const override;
+    [[nodiscard]] bool directory_exists(const std::string& path) const override;
+    [[nodiscard]] std::vector<StorageDirectoryEntry> list_directory(
+        const std::string& path) const override;
     [[nodiscard]] std::string describe_backend() const override;
 
 private:

@@ -10,6 +10,8 @@ std::string_view to_string(ShellSurface surface) {
             return "home";
         case ShellSurface::Launcher:
             return "launcher";
+        case ShellSurface::Files:
+            return "files";
         case ShellSurface::Settings:
             return "settings";
         case ShellSurface::Notifications:
@@ -34,6 +36,11 @@ void ShellController::boot_to_home() {
 
 void ShellController::show_launcher() {
     navigation_.set_surface(ShellSurface::Launcher);
+    log_surface("show");
+}
+
+void ShellController::show_files() {
+    navigation_.set_surface(ShellSurface::Files);
     log_surface("show");
 }
 

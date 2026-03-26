@@ -12,7 +12,9 @@ void AegisShell::set_presentation_sink(ShellPresentationSink* sink) {
 
 void AegisShell::bind_services(const device::ServiceBindingRegistry& services) {
     settings_service_ = services.settings();
+    storage_service_ = services.storage();
     notification_service_ = services.notifications();
+    reload_files_app();
     reload_settings_app();
 }
 
@@ -162,6 +164,10 @@ std::optional<std::string> AegisShell::handle_action(ShellNavigationAction actio
             if (controller_.navigation_state().surface() == ShellSurface::Launcher && focus_system_launcher_next()) {
                 log_launcher_focus();
             }
+            if (controller_.navigation_state().surface() == ShellSurface::Files &&
+                files_app_.focus_next(launcher_focus_wrap_)) {
+                present_frame("files", "built-in files");
+            }
             if (controller_.navigation_state().surface() == ShellSurface::Settings &&
                 settings_app_.focus_next(launcher_focus_wrap_)) {
                 present_frame("settings", "built-in settings");
@@ -172,23 +178,39 @@ std::optional<std::string> AegisShell::handle_action(ShellNavigationAction actio
                 focus_system_launcher_previous()) {
                 log_launcher_focus();
             }
+            if (controller_.navigation_state().surface() == ShellSurface::Files &&
+                files_app_.focus_previous(launcher_focus_wrap_)) {
+                present_frame("files", "built-in files");
+            }
             if (controller_.navigation_state().surface() == ShellSurface::Settings &&
                 settings_app_.focus_previous(launcher_focus_wrap_)) {
                 present_frame("settings", "built-in settings");
             }
             return std::nullopt;
         case ShellNavigationAction::PrimaryAction:
+            if (controller_.navigation_state().surface() == ShellSurface::Files) {
+                if (files_app_.open_focused(storage_service_)) {
+                    present_frame("files", "built-in files");
+                }
+            }
             if (controller_.navigation_state().surface() == ShellSurface::Settings) {
                 apply_settings_app();
                 present_frame("settings", "built-in settings");
             }
             if (controller_.navigation_state().surface() == ShellSurface::Launcher) {
                 if (const auto* focused = focused_system_launcher_entry(); focused != nullptr &&
-                    focused->target == SystemLauncherTarget::Settings) {
-                    controller_.show_settings();
-                    reload_settings_app();
-                    log_surface_summary();
-                    present_frame("settings", "built-in settings");
+                    focused->target != SystemLauncherTarget::None) {
+                    if (focused->target == SystemLauncherTarget::Files) {
+                        controller_.show_files();
+                        reload_files_app();
+                        log_surface_summary();
+                        present_frame("files", "built-in files");
+                    } else if (focused->target == SystemLauncherTarget::Settings) {
+                        controller_.show_settings();
+                        reload_settings_app();
+                        log_surface_summary();
+                        present_frame("settings", "built-in settings");
+                    }
                 }
             }
             return std::nullopt;
@@ -203,13 +225,23 @@ std::optional<std::string> AegisShell::handle_action(ShellNavigationAction actio
             if (controller_.navigation_state().surface() == ShellSurface::Launcher) {
                 if (const auto* focused = focused_system_launcher_entry(); focused != nullptr) {
                     logger_.info("shell", "launcher selected builtin " + focused->id);
-                    if (focused->target == SystemLauncherTarget::Settings) {
+                    if (focused->target == SystemLauncherTarget::Files) {
+                        controller_.show_files();
+                        reload_files_app();
+                        log_surface_summary();
+                        present_frame("files", "built-in files");
+                    } else if (focused->target == SystemLauncherTarget::Settings) {
                         controller_.show_settings();
                         reload_settings_app();
                         log_surface_summary();
                         present_frame("settings", "built-in settings");
                     }
                     return std::nullopt;
+                }
+            }
+            if (controller_.navigation_state().surface() == ShellSurface::Files) {
+                if (files_app_.open_focused(storage_service_)) {
+                    present_frame("files", "built-in files");
                 }
             }
             if (controller_.navigation_state().surface() == ShellSurface::Settings) {
@@ -230,6 +262,16 @@ std::optional<std::string> AegisShell::handle_action(ShellNavigationAction actio
                     log_surface_summary();
                     present_frame("home", "back");
                     break;
+                case ShellSurface::Files:
+                    if (files_app_.go_parent(storage_service_)) {
+                        present_frame("files", "built-in files");
+                    } else {
+                        controller_.show_launcher();
+                        log_surface_summary();
+                        log_launcher_focus();
+                        present_frame("launcher", "back");
+                    }
+                    break;
                 case ShellSurface::Settings:
                 case ShellSurface::Notifications:
                 case ShellSurface::Recovery:
@@ -247,6 +289,12 @@ std::optional<std::string> AegisShell::handle_action(ShellNavigationAction actio
             controller_.boot_to_home();
             log_surface_summary();
             present_frame("home", "menu");
+            return std::nullopt;
+        case ShellNavigationAction::OpenFiles:
+            controller_.show_files();
+            reload_files_app();
+            log_surface_summary();
+            present_frame("files", "built-in files");
             return std::nullopt;
         case ShellNavigationAction::OpenSettings:
             controller_.show_settings();
@@ -358,6 +406,35 @@ ShellPresentationFrame AegisShell::build_frame(std::string headline, std::string
             }
             break;
         }
+        case ShellSurface::Files:
+            frame.context = "built-in files app";
+            frame.detail = files_app_.status_text();
+            if (files_app_.state() == FilesAppModel::State::NoCard) {
+                frame.lines.push_back({.text = "No SD card inserted", .emphasized = true});
+                frame.lines.push_back({.text = "Insert a card to browse storage"});
+            } else if (files_app_.state() == FilesAppModel::State::Unavailable) {
+                frame.lines.push_back({.text = files_app_.status_text(), .emphasized = true});
+                frame.lines.push_back({.text = "This storage root is not mounted yet"});
+            } else {
+                for (std::size_t index = 0; index < files_app_.entries().size() && frame.lines.size() < 8;
+                     ++index) {
+                    const auto& entry = files_app_.entries()[index];
+                    std::string line =
+                        (index == files_app_.focus_index() ? "[*] " : "[ ] ") +
+                        entry.name;
+                    if (entry.directory) {
+                        line += " [DIR]";
+                    } else {
+                        line += " [" + FilesAppModel::format_size(entry.size_bytes) + "]";
+                    }
+                    frame.lines.push_back(
+                        {.text = std::move(line), .emphasized = index == files_app_.focus_index()});
+                }
+                if (frame.lines.empty()) {
+                    frame.lines.push_back({.text = "Folder is empty", .emphasized = true});
+                }
+            }
+            break;
         case ShellSurface::Settings:
             frame.context = "built-in settings app";
             frame.detail = "dirty=" + std::to_string(settings_app_.dirty_count());
@@ -435,7 +512,7 @@ ShellPresentationFrame AegisShell::build_frame(std::string headline, std::string
 void AegisShell::initialize_system_launcher() {
     system_launcher_ = {
         {.id = "apps", .label = "Apps", .subtitle = "catalog soon"},
-        {.id = "files", .label = "Files", .subtitle = "storage soon"},
+        {.id = "files", .label = "Files", .subtitle = "sd browser", .available = true, .target = SystemLauncherTarget::Files},
         {.id = "settings", .label = "Settings", .subtitle = "built-in app", .available = true, .target = SystemLauncherTarget::Settings},
         {.id = "radio", .label = "Radio", .subtitle = "soon"},
         {.id = "tools", .label = "Tools", .subtitle = "soon"},
@@ -486,6 +563,10 @@ bool AegisShell::focus_system_launcher_previous() {
     }
     --system_launcher_focus_index_;
     return true;
+}
+
+void AegisShell::reload_files_app() {
+    files_app_.load_root(storage_service_);
 }
 
 void AegisShell::initialize_settings_app() {
@@ -550,6 +631,9 @@ void AegisShell::log_surface_summary() const {
             break;
         case ShellSurface::Launcher:
             logger_.info("shell", "launcher surface active");
+            break;
+        case ShellSurface::Files:
+            logger_.info("shell", "files surface active");
             break;
         case ShellSurface::Settings:
             logger_.info("shell", "settings surface active");

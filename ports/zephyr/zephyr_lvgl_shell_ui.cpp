@@ -45,6 +45,7 @@ constexpr int kGridColumns = 3;
 constexpr int kTileWidth = 86;
 constexpr int kTileHeight = 76;
 constexpr int kIconWrapSize = 44;
+constexpr int kFileRowIconPaddingRight = 2;
 constexpr uint32_t kClockRefreshMs = 500;
 constexpr uint32_t kTouchFeedbackHoldMs = 90;
 constexpr uint32_t kTileActionDelayMs = 70;
@@ -54,6 +55,7 @@ std::string_view surface_name(shell::ShellSurface surface) {
     switch (surface) {
         case shell::ShellSurface::Home: return "home";
         case shell::ShellSurface::Launcher: return "launcher";
+        case shell::ShellSurface::Files: return "files";
         case shell::ShellSurface::Settings: return "settings";
         case shell::ShellSurface::Notifications: return "notifications";
         case shell::ShellSurface::AppForeground: return "app_foreground";
@@ -219,6 +221,9 @@ void ZephyrLvglShellUi::present(const shell::ShellPresentationFrame& frame) {
             break;
         case shell::ShellSurface::Launcher:
             present_launcher(frame);
+            break;
+        case shell::ShellSurface::Files:
+            present_files_surface(frame);
             break;
         case shell::ShellSurface::Settings:
             present_settings_surface(frame);
@@ -535,6 +540,33 @@ void ZephyrLvglShellUi::build_shell_chrome() {
     lv_obj_clear_flag(touch_feedback_overlay_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_move_foreground(touch_feedback_overlay_);
 
+    files_info_popup_ = lv_obj_create(screen_);
+    lv_obj_remove_style_all(files_info_popup_);
+    lv_obj_set_size(files_info_popup_, 224, 92);
+    lv_obj_center(files_info_popup_);
+    lv_obj_set_style_bg_color(files_info_popup_, hex(kColorBgPanel), 0);
+    lv_obj_set_style_bg_opa(files_info_popup_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(files_info_popup_, hex(kColorFocusBorder), 0);
+    lv_obj_set_style_border_width(files_info_popup_, 2, 0);
+    lv_obj_set_style_radius(files_info_popup_, 6, 0);
+    lv_obj_set_style_pad_left(files_info_popup_, 10, 0);
+    lv_obj_set_style_pad_right(files_info_popup_, 10, 0);
+    lv_obj_set_style_pad_top(files_info_popup_, 8, 0);
+    lv_obj_set_style_pad_bottom(files_info_popup_, 8, 0);
+    lv_obj_add_flag(files_info_popup_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(files_info_popup_, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_move_foreground(files_info_popup_);
+
+    files_info_popup_title_ = lv_label_create(files_info_popup_);
+    lv_obj_add_style(files_info_popup_title_, &style_title_, 0);
+    lv_obj_align(files_info_popup_title_, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    files_info_popup_body_ = lv_label_create(files_info_popup_);
+    lv_obj_add_style(files_info_popup_body_, &style_body_, 0);
+    lv_label_set_long_mode(files_info_popup_body_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(files_info_popup_body_, 200);
+    lv_obj_align(files_info_popup_body_, LV_ALIGN_TOP_LEFT, 0, 26);
+
     auto make_softkey_slot = [&](SoftkeySlot slot, lv_align_t align) -> lv_obj_t* {
         (void)slot;
         auto* node = lv_obj_create(softkey_bar_);
@@ -589,8 +621,13 @@ void ZephyrLvglShellUi::clear_content() {
         touch_feedback_deadline_ms_ = 0;
         pending_action_active_ = false;
         pending_action_deadline_ms_ = 0;
+        files_info_popup_visible_ = false;
+        current_file_entries_.clear();
         if (touch_feedback_overlay_ != nullptr) {
             lv_obj_add_flag(touch_feedback_overlay_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (files_info_popup_ != nullptr) {
+            lv_obj_add_flag(files_info_popup_, LV_OBJ_FLAG_HIDDEN);
         }
         lv_obj_clean(content_);
     }
@@ -672,22 +709,146 @@ void ZephyrLvglShellUi::update_softkeys(std::string_view left,
     lv_obj_set_style_text_color(softkey_left_, hex(kColorTextInverse), 0);
     lv_obj_set_style_text_color(softkey_center_, hex(kColorTextInverse), 0);
     lv_obj_set_style_text_color(softkey_right_, hex(kColorTextInverse), 0);
+    lv_obj_set_style_bg_opa(softkey_center_slot_, LV_OPA_TRANSP, 0);
+}
+
+void ZephyrLvglShellUi::update_files_softkey_state(bool info_enabled) {
+    if (softkey_center_ == nullptr || softkey_center_slot_ == nullptr) {
+        return;
+    }
+    if (info_enabled) {
+        lv_obj_set_style_text_color(softkey_center_, hex(kColorTextInverse), 0);
+        lv_obj_set_style_bg_opa(softkey_center_slot_, LV_OPA_TRANSP, 0);
+    } else {
+        lv_obj_set_style_text_color(softkey_center_, hex(kColorTextMuted), 0);
+        lv_obj_set_style_bg_color(softkey_center_slot_, hex(kColorBgSoftkeyAccent), 0);
+        lv_obj_set_style_bg_opa(softkey_center_slot_, LV_OPA_40, 0);
+    }
+    request_render();
 }
 
 void ZephyrLvglShellUi::present_home(const shell::ShellPresentationFrame& frame) {
-    (void)frame;
     update_top_bar("", "");
     const auto softkeys = softkeys_for_surface(shell::ShellSurface::Home);
     update_softkeys(softkeys[0], softkeys[1], softkeys[2]);
-    render_system_menu(shell::ShellSurface::Home, "");
+    render_system_menu(frame);
 }
 
 void ZephyrLvglShellUi::present_launcher(const shell::ShellPresentationFrame& frame) {
-    (void)frame;
     update_top_bar("", "");
     const auto softkeys = softkeys_for_surface(shell::ShellSurface::Launcher);
     update_softkeys(softkeys[0], softkeys[1], softkeys[2]);
-    render_system_menu(shell::ShellSurface::Launcher, "");
+    render_system_menu(frame);
+}
+
+void ZephyrLvglShellUi::present_files_surface(const shell::ShellPresentationFrame& frame) {
+    update_top_bar("", "");
+    const auto softkeys = softkeys_for_surface(shell::ShellSurface::Files);
+    update_softkeys(softkeys[0], softkeys[1], softkeys[2]);
+    clear_content();
+
+    auto* panel = create_panel(content_);
+    lv_obj_set_size(panel, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(panel, hex(kColorBgPanel), 0);
+    lv_obj_set_style_pad_left(panel, 10, 0);
+    lv_obj_set_style_pad_right(panel, 10, 0);
+    lv_obj_set_style_pad_top(panel, 8, 0);
+    lv_obj_set_style_pad_bottom(panel, 4, 0);
+    lv_obj_center(panel);
+
+    auto* header = lv_obj_create(panel);
+    lv_obj_remove_style_all(header);
+    lv_obj_set_size(header, lv_pct(100), 24);
+    lv_obj_set_style_bg_opa(header, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(header, 0, 0);
+    lv_obj_set_style_pad_all(header, 0, 0);
+    lv_obj_align(header, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    auto* title = lv_label_create(header);
+    lv_obj_add_style(title, &style_title_, 0);
+    lv_label_set_text(title, "Files");
+    lv_obj_align(title, LV_ALIGN_LEFT_MID, 0, 0);
+
+    auto* path = lv_label_create(header);
+    lv_obj_add_style(path, &style_hint_, 0);
+    lv_label_set_long_mode(path, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_width(path, 200);
+    lv_label_set_text(path, frame.detail.c_str());
+    lv_obj_align(path, LV_ALIGN_RIGHT_MID, 0, 0);
+
+    auto* list = lv_obj_create(panel);
+    lv_obj_remove_style_all(list);
+    lv_obj_set_size(list, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(list, 0, 0);
+    lv_obj_set_style_pad_top(list, 28, 0);
+    lv_obj_set_style_pad_bottom(list, 0, 0);
+    lv_obj_set_style_pad_left(list, 0, 0);
+    lv_obj_set_style_pad_right(list, 0, 0);
+    lv_obj_set_style_pad_row(list, 0, 0);
+    lv_obj_set_layout(list, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_align(list, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
+
+    current_file_entries_ = parse_file_entries(frame);
+    update_files_softkey_state(files_info_available());
+    if (current_file_entries_.empty()) {
+        auto* empty = lv_label_create(list);
+        lv_obj_add_style(empty, &style_hint_, 0);
+        lv_label_set_text(empty, "No entries");
+        return;
+    }
+
+    for (std::size_t index = 0; index < current_file_entries_.size(); ++index) {
+        const auto& entry = current_file_entries_[index];
+
+        auto* row = lv_obj_create(list);
+        lv_obj_remove_style_all(row);
+        lv_obj_set_size(row, lv_pct(100), 24);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_left(row, 6, 0);
+        lv_obj_set_style_pad_right(row, 6, 0);
+        lv_obj_set_style_pad_top(row, 3, 0);
+        lv_obj_set_style_pad_bottom(row, 3, 0);
+        lv_obj_set_style_radius(row, 4, 0);
+        if (entry.focused) {
+            lv_obj_set_style_bg_color(row, hex(kColorFocusFill), 0);
+            lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_color(row, hex(kColorFocusBorder), 0);
+            lv_obj_set_style_border_width(row, 1, 0);
+        } else {
+            lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+        }
+
+        auto* label = lv_label_create(row);
+        lv_obj_add_style(label, entry.focused ? &style_title_ : &style_body_, 0);
+        lv_label_set_text(label, entry.label.c_str());
+        lv_obj_align(label, LV_ALIGN_LEFT_MID, 0, 0);
+
+        if (!entry.meta.empty()) {
+            const lv_image_dsc_t* icon = nullptr;
+            if (entry.directory) {
+                icon = entry.focused ? &g_folder_icon_18_image : &g_folder_icon_16_image;
+            } else {
+                icon = entry.focused ? &g_file_icon_18_image : &g_file_icon_16_image;
+            }
+            if (icon != nullptr) {
+                auto* meta_icon = lv_image_create(row);
+                lv_image_set_src(meta_icon, icon);
+                lv_obj_align(meta_icon, LV_ALIGN_RIGHT_MID, -kFileRowIconPaddingRight, 0);
+            }
+        }
+
+        if ((index + 1U) < current_file_entries_.size()) {
+            auto* divider = lv_obj_create(list);
+            lv_obj_remove_style_all(divider);
+            lv_obj_set_size(divider, lv_pct(100), 1);
+            lv_obj_set_style_bg_color(divider, hex(kColorPanelDivider), 0);
+            lv_obj_set_style_bg_opa(divider, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(divider, 0, 0);
+        }
+    }
 }
 
 void ZephyrLvglShellUi::present_settings_surface(const shell::ShellPresentationFrame& frame) {
@@ -843,6 +1004,8 @@ std::array<std::string_view, 3> ZephyrLvglShellUi::softkeys_for_surface(shell::S
             return {"Open", "Select", "Back"};
         case shell::ShellSurface::Launcher:
             return {"Open", "Menu", "Back"};
+        case shell::ShellSurface::Files:
+            return {"Open", "Info", "Back"};
         case shell::ShellSurface::Settings:
             return {"Apply", "Select", "Back"};
         case shell::ShellSurface::Notifications:
@@ -859,6 +1022,9 @@ std::array<std::string_view, 3> ZephyrLvglShellUi::softkeys_for_surface(shell::S
 shell::ShellNavigationAction ZephyrLvglShellUi::action_for_softkey(SoftkeySlot slot) const {
     switch (slot) {
         case SoftkeySlot::Left:
+            if (active_surface_ == shell::ShellSurface::Files) {
+                return shell::ShellNavigationAction::Select;
+            }
             if (active_surface_ == shell::ShellSurface::Home) {
                 return shell::ShellNavigationAction::Select;
             }
@@ -870,6 +1036,9 @@ shell::ShellNavigationAction ZephyrLvglShellUi::action_for_softkey(SoftkeySlot s
             }
             return shell::ShellNavigationAction::PrimaryAction;
         case SoftkeySlot::Center:
+            if (active_surface_ == shell::ShellSurface::Files) {
+                return shell::ShellNavigationAction::PrimaryAction;
+            }
             if (active_surface_ == shell::ShellSurface::Launcher ||
                 active_surface_ == shell::ShellSurface::Home ||
                 active_surface_ == shell::ShellSurface::Settings ||
@@ -970,6 +1139,47 @@ std::vector<ZephyrLvglShellUi::SettingsEntryView> ZephyrLvglShellUi::parse_setti
     return entries;
 }
 
+std::vector<ZephyrLvglShellUi::FileEntryView> ZephyrLvglShellUi::parse_file_entries(
+    const shell::ShellPresentationFrame& frame) const {
+    std::vector<FileEntryView> entries;
+    entries.reserve(frame.lines.size());
+
+    for (const auto& line : frame.lines) {
+        auto text = trim(line.text);
+        if (text.empty()) {
+            continue;
+        }
+        if (text == "No SD card inserted" || text == "Insert a card to browse storage" ||
+            text == "Storage unavailable" || text == "The SD card mount is not ready" ||
+            text == "Folder is empty") {
+            continue;
+        }
+
+        FileEntryView entry;
+        entry.focused = line.emphasized || text.rfind("[*]", 0) == 0;
+        if (text.rfind("[*]", 0) == 0 || text.rfind("[ ]", 0) == 0) {
+            text = trim(text.substr(3));
+        }
+
+        const auto bracket = text.find(" [");
+        if (bracket != std::string::npos) {
+            entry.label = trim(text.substr(0, bracket));
+            entry.meta = trim(text.substr(bracket + 1));
+            if (!entry.meta.empty() && entry.meta.back() == ']') {
+                entry.meta.pop_back();
+            }
+            entry.directory = entry.meta == "DIR";
+        } else {
+            entry.label = trim(text);
+        }
+        if (!entry.label.empty()) {
+            entries.push_back(std::move(entry));
+        }
+    }
+
+    return entries;
+}
+
 std::string ZephyrLvglShellUi::trim(std::string_view value) {
     std::size_t start = 0;
     while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
@@ -990,6 +1200,8 @@ std::string ZephyrLvglShellUi::to_route_name(shell::ShellSurface surface) {
             return "HOME";
         case shell::ShellSurface::Launcher:
             return "MAIN MENU";
+        case shell::ShellSurface::Files:
+            return "FILES";
         case shell::ShellSurface::Settings:
             return "SETTINGS";
         case shell::ShellSurface::Notifications:
@@ -1017,8 +1229,8 @@ lv_obj_t* ZephyrLvglShellUi::create_panel(lv_obj_t* parent) const {
 std::vector<ZephyrLvglShellUi::BuiltinMenuEntry> ZephyrLvglShellUi::builtin_menu_entries() const {
     return {
         {.id = "apps", .label = "Apps", .color = 0xD7E4EC},
-        {.id = "files", .label = "Files", .color = 0x4E8FBE},
-        {.id = "settings", .label = "Settings", .color = 0xE9EEF1, .available = true, .action = shell::ShellNavigationAction::OpenSettings},
+        {.id = "files", .label = "Files", .color = 0x4E8FBE, .available = true, .use_files_icon = true, .action = shell::ShellNavigationAction::OpenFiles},
+        {.id = "settings", .label = "Settings", .color = 0xE9EEF1, .available = true, .use_settings_icon = true, .action = shell::ShellNavigationAction::OpenSettings},
         {.id = "radio", .label = "Radio", .color = 0xDCE8D6},
         {.id = "messages", .label = "Messages", .color = 0xE5DDD2},
         {.id = "device", .label = "Device", .color = 0xDDD9E8},
@@ -1028,9 +1240,7 @@ std::vector<ZephyrLvglShellUi::BuiltinMenuEntry> ZephyrLvglShellUi::builtin_menu
     };
 }
 
-void ZephyrLvglShellUi::render_system_menu(shell::ShellSurface surface, std::string_view title) {
-    (void)surface;
-    (void)title;
+void ZephyrLvglShellUi::render_system_menu(const shell::ShellPresentationFrame& frame) {
     clear_content();
 
     auto* grid = lv_obj_create(content_);
@@ -1056,18 +1266,22 @@ void ZephyrLvglShellUi::render_system_menu(shell::ShellSurface surface, std::str
     lv_obj_set_style_bg_opa(grid, LV_OPA_70, LV_PART_SCROLLBAR);
 
     const auto entries = builtin_menu_entries();
+    const auto launcher_entries = parse_launcher_entries(frame);
     for (std::size_t index = 0; index < entries.size(); ++index) {
-        create_builtin_tile(grid,
-                            entries[index],
-                            index == 2U,
-                            entries[index].id == "settings");
+        bool focused = false;
+        for (const auto& launcher_entry : launcher_entries) {
+            if (launcher_entry.label == entries[index].label) {
+                focused = launcher_entry.focused;
+                break;
+            }
+        }
+        create_builtin_tile(grid, entries[index], focused);
     }
 }
 
 void ZephyrLvglShellUi::create_builtin_tile(lv_obj_t* parent,
                                             const BuiltinMenuEntry& entry,
-                                            bool focused,
-                                            bool use_settings_icon) {
+                                            bool focused) {
     auto* tile = lv_obj_create(parent);
     lv_obj_remove_style_all(tile);
     lv_obj_set_size(tile, kTileWidth, kTileHeight);
@@ -1076,6 +1290,12 @@ void ZephyrLvglShellUi::create_builtin_tile(lv_obj_t* parent,
     lv_obj_set_style_outline_width(tile, 0, 0);
     lv_obj_set_style_shadow_width(tile, 0, 0);
     lv_obj_set_style_radius(tile, 10, 0);
+    if (focused) {
+        lv_obj_set_style_bg_color(tile, hex(kColorFocusFill), 0);
+        lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(tile, hex(kColorFocusBorder), 0);
+        lv_obj_set_style_border_width(tile, 1, 0);
+    }
     lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
 
     auto* icon_wrap = lv_obj_create(tile);
@@ -1089,9 +1309,14 @@ void ZephyrLvglShellUi::create_builtin_tile(lv_obj_t* parent,
     lv_obj_set_style_shadow_width(icon_wrap, 0, 0);
     lv_obj_clear_flag(icon_wrap, LV_OBJ_FLAG_SCROLLABLE);
 
-    if (use_settings_icon) {
+    if (entry.use_settings_icon) {
         auto* image = lv_image_create(icon_wrap);
         lv_image_set_src(image, &g_settings_icon_image);
+        lv_obj_set_style_bg_opa(image, LV_OPA_TRANSP, 0);
+        lv_obj_center(image);
+    } else if (entry.use_files_icon) {
+        auto* image = lv_image_create(icon_wrap);
+        lv_image_set_src(image, &g_files_icon_image);
         lv_obj_set_style_bg_opa(image, LV_OPA_TRANSP, 0);
         lv_obj_center(image);
     } else {
@@ -1117,7 +1342,7 @@ void ZephyrLvglShellUi::create_builtin_tile(lv_obj_t* parent,
     }
 
     auto* label = lv_label_create(tile);
-    lv_obj_add_style(label, &style_body_, 0);
+    lv_obj_add_style(label, focused ? &style_title_ : &style_body_, 0);
     lv_label_set_text(label, entry.label.c_str());
     lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, -2);
     lv_obj_set_style_text_color(label, hex(kColorTextPrimary), 0);
@@ -1307,6 +1532,51 @@ void ZephyrLvglShellUi::clear_softkey_pressed_state() {
     softkey_pressed_active_ = false;
 }
 
+bool ZephyrLvglShellUi::files_info_available() const {
+    if (active_surface_ != shell::ShellSurface::Files || current_file_entries_.empty()) {
+        return false;
+    }
+    for (const auto& entry : current_file_entries_) {
+        if (entry.focused) {
+            return !entry.directory;
+        }
+    }
+    return false;
+}
+
+void ZephyrLvglShellUi::show_files_info_popup() {
+    if (!files_info_available() || files_info_popup_ == nullptr ||
+        files_info_popup_title_ == nullptr || files_info_popup_body_ == nullptr) {
+        return;
+    }
+    for (const auto& entry : current_file_entries_) {
+        if (!entry.focused || entry.directory) {
+            continue;
+        }
+        lv_label_set_text(files_info_popup_title_, "File Info");
+        std::string body = "Name: " + entry.label;
+        if (!entry.meta.empty()) {
+            body += "\nSize: ";
+            body += entry.meta;
+        }
+        lv_label_set_text(files_info_popup_body_, body.c_str());
+        lv_obj_clear_flag(files_info_popup_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(files_info_popup_);
+        files_info_popup_visible_ = true;
+        request_render();
+        return;
+    }
+}
+
+void ZephyrLvglShellUi::hide_files_info_popup() {
+    if (files_info_popup_ == nullptr) {
+        return;
+    }
+    lv_obj_add_flag(files_info_popup_, LV_OBJ_FLAG_HIDDEN);
+    files_info_popup_visible_ = false;
+    request_render();
+}
+
 void ZephyrLvglShellUi::poll_touch_actions() {
     if (!cached_touch_valid_ || touch_targets_.empty()) {
         return;
@@ -1400,6 +1670,25 @@ void ZephyrLvglShellUi::poll_touch_actions() {
 }
 
 void ZephyrLvglShellUi::dispatch_action(shell::ShellNavigationAction action) {
+    if (active_surface_ == shell::ShellSurface::Files && files_info_popup_visible_) {
+        if (action == shell::ShellNavigationAction::Back ||
+            action == shell::ShellNavigationAction::PrimaryAction ||
+            action == shell::ShellNavigationAction::Select) {
+            hide_files_info_popup();
+            if (action == shell::ShellNavigationAction::Back) {
+                return;
+            }
+        }
+    }
+    if (active_surface_ == shell::ShellSurface::Files &&
+        action == shell::ShellNavigationAction::PrimaryAction) {
+        if (!files_info_available()) {
+            logger_.info("lvgl", "files info disabled for focused directory");
+            return;
+        }
+        show_files_info_popup();
+        return;
+    }
     logger_.info("lvgl", "dispatch action " + std::string(shell::to_string(action)));
     if (action_callback_) {
         action_callback_(action);

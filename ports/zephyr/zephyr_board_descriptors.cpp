@@ -62,7 +62,8 @@ device::ShellSurfaceProfile make_device_a_shell_profile() {
                                shell::ShellNavigationAction::MovePrevious,
                                shell::ShellNavigationAction::PrimaryAction,
                                shell::ShellNavigationAction::Select,
-                               shell::ShellNavigationAction::Back},
+                               shell::ShellNavigationAction::Back,
+                               shell::ShellNavigationAction::OpenFiles},
     };
 }
 
@@ -115,6 +116,7 @@ device::ShellSurfaceProfile make_device_b_shell_profile() {
                                shell::ShellNavigationAction::PrimaryAction,
                                shell::ShellNavigationAction::Select,
                                shell::ShellNavigationAction::Back,
+                               shell::ShellNavigationAction::OpenFiles,
                                shell::ShellNavigationAction::OpenSettings},
     };
 }
@@ -212,6 +214,7 @@ device::ShellSurfaceProfile make_tlora_pager_shell_profile() {
                                shell::ShellNavigationAction::Select,
                                shell::ShellNavigationAction::Back,
                                shell::ShellNavigationAction::OpenMenu,
+                               shell::ShellNavigationAction::OpenFiles,
                                shell::ShellNavigationAction::OpenSettings,
                                shell::ShellNavigationAction::OpenNotifications},
     };
@@ -239,6 +242,7 @@ device::ShellSurfaceProfile make_tdeck_shell_profile() {
                                shell::ShellNavigationAction::Select,
                                shell::ShellNavigationAction::Back,
                                shell::ShellNavigationAction::OpenMenu,
+                               shell::ShellNavigationAction::OpenFiles,
                                shell::ShellNavigationAction::OpenSettings,
                                shell::ShellNavigationAction::OpenNotifications},
     };

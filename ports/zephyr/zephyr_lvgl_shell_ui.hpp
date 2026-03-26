@@ -70,11 +70,20 @@ private:
         bool dirty {false};
     };
 
+    struct FileEntryView {
+        std::string label;
+        std::string meta;
+        bool focused {false};
+        bool directory {false};
+    };
+
     struct BuiltinMenuEntry {
         std::string id;
         std::string label;
         uint32_t color {0};
         bool available {false};
+        bool use_files_icon {false};
+        bool use_settings_icon {false};
         shell::ShellNavigationAction action {shell::ShellNavigationAction::OpenMenu};
     };
 
@@ -95,13 +104,17 @@ private:
     void clear_content();
     void update_top_bar(std::string_view route, std::string_view detail);
     void update_softkeys(std::string_view left, std::string_view center, std::string_view right);
+    void update_files_softkey_state(bool info_enabled);
     void present_home(const shell::ShellPresentationFrame& frame);
     void present_launcher(const shell::ShellPresentationFrame& frame);
+    void present_files_surface(const shell::ShellPresentationFrame& frame);
     void present_settings_surface(const shell::ShellPresentationFrame& frame);
     void present_generic_surface(const shell::ShellPresentationFrame& frame);
     [[nodiscard]] std::vector<LauncherEntryView> parse_launcher_entries(
         const shell::ShellPresentationFrame& frame) const;
     [[nodiscard]] std::vector<SettingsEntryView> parse_settings_entries(
+        const shell::ShellPresentationFrame& frame) const;
+    [[nodiscard]] std::vector<FileEntryView> parse_file_entries(
         const shell::ShellPresentationFrame& frame) const;
     [[nodiscard]] std::array<std::string_view, 3> softkeys_for_surface(shell::ShellSurface surface) const;
     [[nodiscard]] shell::ShellNavigationAction action_for_softkey(SoftkeySlot slot) const;
@@ -110,11 +123,8 @@ private:
     [[nodiscard]] lv_color_t hex(uint32_t rgb) const;
     [[nodiscard]] lv_obj_t* create_panel(lv_obj_t* parent) const;
     [[nodiscard]] std::vector<BuiltinMenuEntry> builtin_menu_entries() const;
-    void render_system_menu(shell::ShellSurface surface, std::string_view title);
-    void create_builtin_tile(lv_obj_t* parent,
-                             const BuiltinMenuEntry& entry,
-                             bool focused,
-                             bool use_settings_icon);
+    void render_system_menu(const shell::ShellPresentationFrame& frame);
+    void create_builtin_tile(lv_obj_t* parent, const BuiltinMenuEntry& entry, bool focused);
     void update_status_icons();
     void update_status_clock();
     void update_touch_feedback();
@@ -128,6 +138,9 @@ private:
     void set_touch_target_pressed(TouchTarget* target, bool pressed);
     void set_softkey_pressed(SoftkeySlot slot, bool pressed);
     void clear_softkey_pressed_state();
+    void show_files_info_popup();
+    void hide_files_info_popup();
+    [[nodiscard]] bool files_info_available() const;
     void dispatch_action(shell::ShellNavigationAction action);
     void pump_once();
     void request_render();
@@ -160,6 +173,9 @@ private:
     lv_obj_t* softkey_left_ {nullptr};
     lv_obj_t* softkey_center_ {nullptr};
     lv_obj_t* softkey_right_ {nullptr};
+    lv_obj_t* files_info_popup_ {nullptr};
+    lv_obj_t* files_info_popup_title_ {nullptr};
+    lv_obj_t* files_info_popup_body_ {nullptr};
     lv_obj_t* splash_wrap_ {nullptr};
     lv_obj_t* splash_logo_ {nullptr};
     lv_obj_t* splash_subtitle_label_ {nullptr};
@@ -186,6 +202,7 @@ private:
     SoftkeySlot softkey_right_id_ {SoftkeySlot::Right};
     std::deque<shell::ShellNavigationAction> tile_actions_;
     std::vector<TouchTarget> touch_targets_;
+    std::vector<FileEntryView> current_file_entries_;
     shell::ShellSurface active_surface_ {shell::ShellSurface::Home};
     TouchTarget* touch_pressed_target_ {nullptr};
     SoftkeySlot active_pressed_softkey_ {SoftkeySlot::Left};
@@ -206,6 +223,7 @@ private:
     bool pending_action_active_ {false};
     shell::ShellNavigationAction pending_action_ {shell::ShellNavigationAction::OpenMenu};
     uint32_t pending_action_deadline_ms_ {0};
+    bool files_info_popup_visible_ {false};
     bool render_pending_ {false};
     uint32_t flush_count_ {0};
 };

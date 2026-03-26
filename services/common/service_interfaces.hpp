@@ -53,6 +53,12 @@ struct TextInputFocusState {
     std::string route_name;
 };
 
+struct StorageDirectoryEntry {
+    std::string name;
+    bool directory {false};
+    std::size_t size_bytes {0};
+};
+
 class IDisplayService {
 public:
     virtual ~IDisplayService() = default;
@@ -128,6 +134,11 @@ class IStorageService {
 public:
     virtual ~IStorageService() = default;
     [[nodiscard]] virtual bool available() const = 0;
+    [[nodiscard]] virtual bool sd_card_present() const = 0;
+    [[nodiscard]] virtual std::string mount_root() const = 0;
+    [[nodiscard]] virtual bool directory_exists(const std::string& path) const = 0;
+    [[nodiscard]] virtual std::vector<StorageDirectoryEntry> list_directory(
+        const std::string& path) const = 0;
     [[nodiscard]] virtual std::string describe_backend() const = 0;
 };
 

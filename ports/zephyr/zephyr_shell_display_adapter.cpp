@@ -56,6 +56,8 @@ std::string_view surface_name(shell::ShellSurface surface) {
             return "home";
         case shell::ShellSurface::Launcher:
             return "launcher";
+        case shell::ShellSurface::Files:
+            return "files";
         case shell::ShellSurface::Settings:
             return "settings";
         case shell::ShellSurface::Notifications:
@@ -1083,6 +1085,8 @@ uint16_t ZephyrShellDisplayAdapter::color_for(shell::ShellSurface surface) const
             return 0xFFFF;
         case shell::ShellSurface::Launcher:
             return 0xFFE0;
+        case shell::ShellSurface::Files:
+            return 0xAFE5;
         case shell::ShellSurface::Settings:
             return 0x07FF;
         case shell::ShellSurface::Notifications:

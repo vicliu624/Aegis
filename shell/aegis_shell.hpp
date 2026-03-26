@@ -12,6 +12,7 @@
 #include "shell/control/shell_input_model.hpp"
 #include "shell/launcher/launcher_model.hpp"
 #include "shell/presentation/shell_presentation_sink.hpp"
+#include "apps/builtin/files/files_app_model.hpp"
 #include "apps/builtin/settings/settings_app_model.hpp"
 #include "shell/settings/settings_model.hpp"
 #include "shell/status/notification_model.hpp"
@@ -48,6 +49,7 @@ public:
 private:
     enum class SystemLauncherTarget {
         None,
+        Files,
         Settings,
     };
 
@@ -60,6 +62,7 @@ private:
     };
 
     void initialize_system_launcher();
+    void reload_files_app();
     void initialize_settings_app();
     [[nodiscard]] const SystemLauncherEntry* focused_system_launcher_entry() const;
     bool focus_system_launcher_next();
@@ -82,6 +85,7 @@ private:
     ShellPresentationSink* presentation_sink_ {nullptr};
     ShellInputModel input_;
     SettingsModel settings_;
+    FilesAppModel files_app_;
     SettingsAppModel settings_app_;
     StatusModel status_;
     NotificationModel notifications_;
@@ -89,6 +93,7 @@ private:
     std::vector<SystemLauncherEntry> system_launcher_;
     std::size_t system_launcher_focus_index_ {0};
     std::shared_ptr<services::ISettingsService> settings_service_;
+    std::shared_ptr<services::IStorageService> storage_service_;
     std::shared_ptr<services::INotificationService> notification_service_;
     bool startup_page_launcher_ {false};
     bool launcher_focus_wrap_ {true};
