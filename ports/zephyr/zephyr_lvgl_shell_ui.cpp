@@ -307,14 +307,6 @@ void ZephyrLvglShellUi::flush_display(const lv_area_t* area, uint8_t* px_map) {
     lv_draw_sw_rgb565_swap(px_map, static_cast<uint32_t>(width * height));
     const auto* pixels = reinterpret_cast<const uint16_t*>(px_map);
     ++flush_count_;
-    if (flush_count_ <= 20 || (flush_count_ % 25) == 0) {
-        logger_.info("lvgl",
-                     "flush count=" + std::to_string(flush_count_) +
-                         " surface=" + std::string(surface_name(active_surface_)) +
-                         " headline=" + active_frame_.headline +
-                         " area=" + std::to_string(area->x1) + "," + std::to_string(area->y1) +
-                         " " + std::to_string(width) + "x" + std::to_string(height));
-    }
     flush_callback_(area->x1,
                     area->y1,
                     width,
@@ -1602,14 +1594,8 @@ void ZephyrLvglShellUi::dispatch_invocation(const shell::ShellInputInvocation& i
 }
 
 void ZephyrLvglShellUi::pump_once() {
-    logger_.info("lvgl",
-                 "pump start pending=" + std::string(render_pending_ ? "1" : "0") + " surface=" +
-                     std::string(surface_name(active_surface_)) + " headline=" + active_frame_.headline);
     render_pending_ = false;
     (void)lv_timer_handler();
-    logger_.info("lvgl",
-                 "pump end surface=" + std::string(surface_name(active_surface_)) + " headline=" +
-                     active_frame_.headline + " flushes=" + std::to_string(flush_count_));
 }
 
 void ZephyrLvglShellUi::request_render() {
@@ -1621,10 +1607,6 @@ void ZephyrLvglShellUi::request_render() {
     if (target != nullptr) {
         lv_obj_invalidate(target);
     }
-    logger_.info("lvgl",
-                 "render requested surface=" + std::string(surface_name(active_surface_)) +
-                     " headline=" + active_frame_.headline + " target=" +
-                     (target != nullptr ? std::string("yes") : std::string("no")));
 }
 
 }  // namespace aegis::ports::zephyr
