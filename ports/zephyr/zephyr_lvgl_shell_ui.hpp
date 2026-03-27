@@ -208,6 +208,7 @@ private:
     StatusIcons last_status_icons_ {};
     bool last_status_icons_valid_ {false};
     uint32_t last_clock_update_ms_ {0};
+    std::string last_clock_text_;
     uint32_t last_touch_poll_ms_ {0};
     TouchTarget* touch_feedback_target_ {nullptr};
     uint32_t touch_feedback_deadline_ms_ {0};

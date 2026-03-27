@@ -291,38 +291,44 @@ bool ZephyrShellDisplayAdapter::initialize() {
     }
 
     backend_ = BackendKind::DisplayApi;
-    lvgl_ui_ = std::make_unique<ZephyrLvglShellUi>(
-        logger_,
-        config_,
-        [this](int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) {
-            write_lvgl_region(x, y, width, height, pixels, count);
-        },
-        [this](const shell::ShellInputInvocation& invocation) {
-            const int rc = k_msgq_put(&ui_action_queue_, &invocation, K_NO_WAIT);
-            if (rc != 0) {
-                logger_.info("input",
-                             "ui action queue put failed rc=" + std::to_string(rc));
-            }
-        },
-        [this](int16_t& x, int16_t& y, bool& pressed) {
-            if (read_touch_from_input_cache(x, y, pressed)) {
-                return true;
-            }
-            return runtime_.touch_read_point(x, y, pressed);
-        },
-        [this]() {
-            const int percent = runtime_.battery_percent();
-            if (percent < 0) {
-                return std::string();
-            }
-            const std::string suffix = runtime_.battery_charging() ? "+" : "";
-            return std::to_string(percent) + "%" + suffix;
-        },
-        [this]() { return clock_text(); },
-        [this]() { return status_icons(); });
-    if (lvgl_ui_ != nullptr && !lvgl_ui_->initialize()) {
-        logger_.info("lvgl", "shell ui init failed, keeping legacy renderer");
-        lvgl_ui_.reset();
+    const bool allow_lvgl_shell_ui =
+        config_.display_backend_family != ZephyrBoardDisplayBackendFamily::Pager;
+    if (!allow_lvgl_shell_ui) {
+        logger_.info("lvgl", "shell ui disabled for pager display path; keeping legacy renderer");
+    } else {
+        lvgl_ui_ = std::make_unique<ZephyrLvglShellUi>(
+            logger_,
+            config_,
+            [this](int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) {
+                write_lvgl_region(x, y, width, height, pixels, count);
+            },
+            [this](const shell::ShellInputInvocation& invocation) {
+                const int rc = k_msgq_put(&ui_action_queue_, &invocation, K_NO_WAIT);
+                if (rc != 0) {
+                    logger_.info("input",
+                                 "ui action queue put failed rc=" + std::to_string(rc));
+                }
+            },
+            [this](int16_t& x, int16_t& y, bool& pressed) {
+                if (read_touch_from_input_cache(x, y, pressed)) {
+                    return true;
+                }
+                return runtime_.touch_read_point(x, y, pressed);
+            },
+            [this]() {
+                const int percent = runtime_.battery_percent();
+                if (percent < 0) {
+                    return std::string();
+                }
+                const std::string suffix = runtime_.battery_charging() ? "+" : "";
+                return std::to_string(percent) + "%" + suffix;
+            },
+            [this]() { return clock_text(); },
+            [this]() { return status_icons(); });
+        if (lvgl_ui_ != nullptr && !lvgl_ui_->initialize()) {
+            logger_.info("lvgl", "shell ui init failed, keeping legacy renderer");
+            lvgl_ui_.reset();
+        }
     }
 
     if (lvgl_ui_ == nullptr) {

@@ -51,7 +51,7 @@ constexpr int kTileWidth = 86;
 constexpr int kTileHeight = 76;
 constexpr int kIconWrapSize = 48;
 constexpr int kFileRowIconPaddingRight = 2;
-constexpr uint32_t kClockRefreshMs = 500;
+constexpr uint32_t kClockRefreshMs = 1000;
 constexpr uint32_t kTouchFeedbackHoldMs = 90;
 constexpr uint32_t kTileActionDelayMs = 70;
 constexpr uint32_t kSplashDelayMs = 0;
@@ -1355,6 +1355,11 @@ void ZephyrLvglShellUi::update_status_clock() {
         text = buffer;
     }
 
+    if (text == last_clock_text_) {
+        return;
+    }
+
+    last_clock_text_ = text;
     lv_label_set_text(clock_label_, text.c_str());
     lv_obj_align(clock_label_, LV_ALIGN_CENTER, 0, 0);
     request_render();
