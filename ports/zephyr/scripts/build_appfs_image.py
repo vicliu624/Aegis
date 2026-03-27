@@ -333,6 +333,14 @@ def choose_backend(args: argparse.Namespace) -> tuple[str, object | None]:
         tool = resolve_mklittlefs(args)
         return "mklittlefs", tool
 
+    # The Windows mklittlefs binary has produced malformed nested paths for our
+    # deploy tree (for example "//appsfiles" instead of "/apps/files"), which
+    # leaves /lfs/apps empty at runtime. Prefer the Python backend there.
+    if platform.system().lower() == "windows":
+        littlefs = try_resolve_littlefs_python(args)
+        if littlefs is not None:
+            return "python", littlefs
+
     tool = try_resolve_mklittlefs(args)
     if tool:
         return "mklittlefs", tool

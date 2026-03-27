@@ -421,8 +421,8 @@ The recommended asset directory layout is:
 assets/ui/icons/
   builtins/
     apps.svg
-    settings.svg
-    files.svg
+    settings_icon.png
+    Files_icon.png
     device.svg
     services.svg
     running.svg

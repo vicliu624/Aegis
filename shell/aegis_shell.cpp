@@ -623,8 +623,11 @@ ShellPresentationFrame AegisShell::build_frame(std::string headline, std::string
                     .accessory = ShellPresentationAccessory::None,
                     .actionable = true,
                     .command_id = entry.descriptor.manifest.app_id,
-                    .icon_source = ShellPresentationIconSource::None,
-                    .icon_key = {},
+                    .icon_source = entry.descriptor.icon_exists
+                                       ? ShellPresentationIconSource::AppPackage
+                                       : ShellPresentationIconSource::None,
+                    .icon_key = entry.descriptor.icon_exists ? entry.descriptor.icon_path
+                                                             : std::string {},
                 });
                 std::string line =
                     (focused ? "[*] " : "[ ] ") +
