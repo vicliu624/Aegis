@@ -38,7 +38,7 @@ public:
     void record_boot_log(std::string_view category, std::string_view message);
     void present_boot_log_screen(std::string_view stage) const;
     void tick(uint32_t elapsed_ms);
-    [[nodiscard]] std::optional<shell::ShellNavigationAction> poll_ui_action();
+    [[nodiscard]] std::optional<shell::ShellInputInvocation> poll_ui_action();
     void handle_touch_input_event(const input_event& event);
     void note_user_interaction(std::string_view source = "ui_action");
     [[nodiscard]] bool display_is_awake() const;
@@ -204,7 +204,7 @@ private:
     int64_t last_settings_refresh_ms_ {0};
     bool runtime_settings_applied_ {false};
     k_msgq ui_action_queue_;
-    char ui_action_queue_buffer_[sizeof(shell::ShellNavigationAction) * 8] {};
+    char ui_action_queue_buffer_[sizeof(shell::ShellInputInvocation) * 8] {};
 };
 
 }  // namespace aegis::ports::zephyr

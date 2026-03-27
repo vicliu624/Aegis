@@ -1,37 +1,29 @@
 #include "ports/zephyr/zephyr_boot_log_logger.hpp"
 
-#include <string>
-
-#include "ports/zephyr/zephyr_shell_display_adapter.hpp"
+#include <zephyr/sys/printk.h>
 
 namespace aegis::ports::zephyr {
 
-ZephyrBootLogLogger::ZephyrBootLogLogger(platform::Logger& delegate) : delegate_(delegate) {
-    k_mutex_init(&mutex_);
-}
+ZephyrBootLogLogger::ZephyrBootLogLogger(platform::Logger& delegate) : delegate_(&delegate) {}
 
 void ZephyrBootLogLogger::attach_display(ZephyrShellDisplayAdapter* display) {
-    (void)k_mutex_lock(&mutex_, K_FOREVER);
-    display_ = display;
-    (void)k_mutex_unlock(&mutex_);
+    (void)display;
 }
 
 void ZephyrBootLogLogger::info(std::string_view category, std::string_view message) {
-    (void)k_mutex_lock(&mutex_, K_FOREVER);
-    delegate_.info(category, message);
-    if (display_ != nullptr) {
-        display_->record_boot_log(category, message);
-    }
-    (void)k_mutex_unlock(&mutex_);
+    printk("[aegis][%.*s] %.*s\n",
+           static_cast<int>(category.size()),
+           category.data(),
+           static_cast<int>(message.size()),
+           message.data());
 }
 
 void ZephyrBootLogLogger::error(std::string_view category, std::string_view message) {
-    (void)k_mutex_lock(&mutex_, K_FOREVER);
-    delegate_.error(category, message);
-    if (display_ != nullptr) {
-        display_->record_boot_log(category, std::string("[error] ") + std::string(message));
-    }
-    (void)k_mutex_unlock(&mutex_);
+    printk("[aegis][%.*s][error] %.*s\n",
+           static_cast<int>(category.size()),
+           category.data(),
+           static_cast<int>(message.size()),
+           message.data());
 }
 
 }  // namespace aegis::ports::zephyr

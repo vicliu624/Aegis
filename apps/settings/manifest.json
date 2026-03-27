@@ -1,0 +1,31 @@
+{
+  "app_id": "settings",
+  "display_name": "Settings",
+  "version": "0.1.0",
+  "abi_version": 1,
+  "binary": "app.llext",
+  "entry_symbol": "settings_main",
+  "icon": "icon.bin",
+  "description": "Governed system settings application for device behavior and connectivity controls.",
+  "required_capabilities": [
+    { "id": "display", "min_level": "full" }
+  ],
+  "optional_capabilities": [
+    { "id": "pointer_input", "min_level": "degraded" },
+    { "id": "joystick_input", "min_level": "degraded" },
+    { "id": "keyboard_input", "min_level": "degraded" }
+  ],
+  "requested_permissions": [
+    "ui_surface",
+    "settings_write"
+  ],
+  "memory_budget": {
+    "heap_bytes": 24576,
+    "ui_bytes": 8192
+  },
+  "singleton": true,
+  "allow_background": false,
+  "category": "system",
+  "order_hint": 10,
+  "hidden": false
+}

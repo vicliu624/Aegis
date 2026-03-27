@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -32,9 +33,13 @@ public:
 
     void boot(const std::string& package_id);
     void attach_shell_presentation_sink(shell::ShellPresentationSink* sink);
+    void set_foreground_input_pollers(
+        std::function<std::optional<shell::ShellInputInvocation>()> ui_invocation_poller,
+        std::function<std::optional<shell::ShellNavigationAction>()> routed_action_poller);
     void run_first_compatible_app();
     void run_app(const std::string& app_id);
     void run_shell_action_sequence(const std::vector<shell::ShellNavigationAction>& actions);
+    void run_shell_input_sequence(const std::vector<shell::ShellInputInvocation>& invocations);
 
 private:
     void run_descriptor(const AppDescriptor& descriptor);
@@ -52,6 +57,8 @@ private:
     shell::AegisShell shell_;
     std::optional<BootArtifacts> boot_artifacts_;
     std::vector<std::string> active_sessions_;
+    std::function<std::optional<shell::ShellInputInvocation>()> foreground_ui_invocation_poller_;
+    std::function<std::optional<shell::ShellNavigationAction>()> foreground_routed_action_poller_;
     bool booted_ {false};
 };
 

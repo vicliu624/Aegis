@@ -131,8 +131,8 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--selftest-app",
-        default="demo_hello",
-        help="Boot self-test app id. Use an empty string to disable. Default: demo_hello",
+        default="",
+        help="Boot self-test app id. Use an empty string to disable. Default: disabled",
     )
     parser.add_argument(
         "--port",
@@ -229,10 +229,6 @@ def build_command(args: argparse.Namespace, paths: Paths, target: str) -> list[s
 
 
 def ensure_configured(args: argparse.Namespace, paths: Paths) -> None:
-    build_dir = absolute_build_dir(paths, args.build_dir)
-    cache_path = build_dir / "CMakeCache.txt"
-    if cache_path.exists():
-        return
     run_configure_with_hint(args, paths)
 
 

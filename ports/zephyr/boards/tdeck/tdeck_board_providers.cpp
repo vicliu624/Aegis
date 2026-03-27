@@ -10,11 +10,15 @@
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/pwm.h>
 
+#include <esp_attr.h>
+
 #include "ports/zephyr/zephyr_gpio_pin.hpp"
 
 namespace aegis::ports::zephyr {
 
 namespace {
+
+Z_KERNEL_STACK_DEFINE_IN(g_tdeck_keyboard_sampler_stack, 1024, EXT_RAM_BSS_ATTR);
 
 constexpr uint16_t kTdeckKeyboardAddress = 0x55;
 constexpr uint16_t kTdeckPmuAddress = 0x34;
@@ -223,6 +227,10 @@ ZephyrTdeckBoardControlProvider::ZephyrTdeckBoardControlProvider(platform::Logge
                                                                  ZephyrBoardBackendConfig config)
     : logger_(logger), config_(std::move(config)) {
     k_mutex_init(&mutex_);
+    k_msgq_init(&keyboard_character_queue_,
+                reinterpret_cast<char*>(keyboard_character_queue_storage_.data()),
+                sizeof(uint8_t),
+                keyboard_character_queue_storage_.size());
     power_state_.fill(false);
 }
 
@@ -264,7 +272,11 @@ int ZephyrTdeckBoardControlProvider::with_participant(TdeckBoardControlParticipa
         return -EAGAIN;
     }
     const int rc = action();
-    if (operation != "keyboard.read_char" && operation != "touch.read.status") {
+    const bool noisy_poll_success =
+        rc == 0 &&
+        (operation == "keyboard.read_char" || operation == "keyboard.sample_char" ||
+         operation == "touch.read.status" || operation == "touch.read.point");
+    if (!noisy_poll_success) {
         logger_.info("board",
                      "coordination op coordinator=" + coordinator_name() +
                          " owner=" + std::string(board_control_participant_name(participant)) +
@@ -350,6 +362,46 @@ bool ZephyrTdeckBoardControlProvider::probe_keyboard_controller() {
     return true;
 }
 
+bool ZephyrTdeckBoardControlProvider::start_keyboard_sampler() {
+    if (!keyboard_ready_ || !ready()) {
+        return false;
+    }
+    if (keyboard_sampler_started_) {
+        return true;
+    }
+
+    keyboard_sampler_started_ = true;
+    keyboard_sampler_tid_ = k_thread_create(&keyboard_sampler_thread_,
+                                            g_tdeck_keyboard_sampler_stack,
+                                            K_THREAD_STACK_SIZEOF(g_tdeck_keyboard_sampler_stack),
+                                            &ZephyrTdeckBoardControlProvider::keyboard_sampler_thread_entry,
+                                            this,
+                                            nullptr,
+                                            nullptr,
+                                            8,
+                                            0,
+                                            K_NO_WAIT);
+    if (keyboard_sampler_tid_ == nullptr) {
+        keyboard_sampler_started_ = false;
+        return false;
+    }
+    k_thread_name_set(keyboard_sampler_tid_, "aegis_tdeck_kbd");
+    logger_.info("board", "tdeck keyboard sampler started");
+    return true;
+}
+
+bool ZephyrTdeckBoardControlProvider::keyboard_pending_character_count(uint8_t& pending) const {
+    pending = static_cast<uint8_t>(
+        std::min<std::uint32_t>(k_msgq_num_used_get(&keyboard_character_queue_), 255U));
+    return keyboard_ready_;
+}
+
+bool ZephyrTdeckBoardControlProvider::keyboard_pop_character(uint8_t& raw_character) const {
+    raw_character = 0;
+    return k_msgq_get(&keyboard_character_queue_, &raw_character, K_NO_WAIT) == 0 &&
+           raw_character != 0;
+}
+
 bool ZephyrTdeckBoardControlProvider::probe_touch_controller() {
     touch_address_ = 0;
     pulse_touch_irq_wakeup();
@@ -413,18 +465,7 @@ bool ZephyrTdeckBoardControlProvider::probe_battery_controller() {
 
 bool ZephyrTdeckBoardControlProvider::keyboard_read_character(uint8_t& raw_character) const {
     raw_character = 0;
-    if (!keyboard_ready_ || !ready()) {
-        return false;
-    }
-    int rc = -EAGAIN;
-    (void)with_participant(TdeckBoardControlParticipant::Keyboard,
-                           K_MSEC(50),
-                           "keyboard.read_char",
-                           [&]() {
-                               rc = i2c_read(i2c_device_, &raw_character, 1, kTdeckKeyboardAddress);
-                               return rc;
-                           });
-    return rc == 0 && raw_character != 0;
+    return keyboard_pop_character(raw_character);
 }
 
 bool ZephyrTdeckBoardControlProvider::read_touch_point(int16_t& x, int16_t& y, bool& pressed) const {
@@ -733,6 +774,54 @@ bool ZephyrTdeckBoardControlProvider::set_keyboard_backlight_level_unlocked(uint
     }
     power_state_[power_channel_index(TdeckPowerChannel::KeyboardBacklight)] = level > 0;
     return true;
+}
+
+bool ZephyrTdeckBoardControlProvider::read_keyboard_character_unlocked(uint8_t& raw_character) const {
+    raw_character = 0;
+    if (!keyboard_ready_ || !ready()) {
+        return false;
+    }
+    int rc = -EAGAIN;
+    (void)with_participant(TdeckBoardControlParticipant::Keyboard,
+                           K_MSEC(20),
+                           "keyboard.sample_char",
+                           [&]() {
+                               rc = i2c_read(i2c_device_, &raw_character, 1, kTdeckKeyboardAddress);
+                               return rc;
+                           });
+    return rc == 0 && raw_character != 0;
+}
+
+void ZephyrTdeckBoardControlProvider::keyboard_sampler_thread_entry(void* p1, void* p2, void* p3) {
+    ARG_UNUSED(p2);
+    ARG_UNUSED(p3);
+    auto* self = static_cast<ZephyrTdeckBoardControlProvider*>(p1);
+    if (self == nullptr) {
+        return;
+    }
+
+    for (;;) {
+        self->sample_keyboard_once();
+        k_sleep(K_MSEC(12));
+    }
+}
+
+void ZephyrTdeckBoardControlProvider::sample_keyboard_once() const {
+    uint8_t raw_character = 0;
+    if (!read_keyboard_character_unlocked(raw_character)) {
+        return;
+    }
+
+    if (k_msgq_put(&keyboard_character_queue_, &raw_character, K_NO_WAIT) != 0) {
+        uint8_t discarded = 0;
+        (void)k_msgq_get(&keyboard_character_queue_, &discarded, K_NO_WAIT);
+        (void)k_msgq_put(&keyboard_character_queue_, &raw_character, K_NO_WAIT);
+        logger_.info("board",
+                     "tdeck keyboard queue overflow drop-oldest raw=" + std::to_string(raw_character));
+        return;
+    }
+
+    logger_.info("board", "tdeck keyboard sampled raw=" + std::to_string(raw_character));
 }
 
 bool ZephyrTdeckBoardControlProvider::lock_for(TdeckBoardControlParticipant participant, k_timeout_t timeout) const {

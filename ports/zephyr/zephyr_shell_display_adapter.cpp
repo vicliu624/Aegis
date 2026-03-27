@@ -56,8 +56,6 @@ std::string_view surface_name(shell::ShellSurface surface) {
             return "home";
         case shell::ShellSurface::Launcher:
             return "launcher";
-        case shell::ShellSurface::Files:
-            return "files";
         case shell::ShellSurface::Settings:
             return "settings";
         case shell::ShellSurface::Notifications:
@@ -271,7 +269,7 @@ ZephyrShellDisplayAdapter::ZephyrShellDisplayAdapter(platform::Logger& logger,
     k_mutex_init(&touch_input_mutex_);
     k_msgq_init(&ui_action_queue_,
                 ui_action_queue_buffer_,
-                sizeof(shell::ShellNavigationAction),
+                sizeof(shell::ShellInputInvocation),
                 8);
 }
 
@@ -299,8 +297,8 @@ bool ZephyrShellDisplayAdapter::initialize() {
         [this](int x, int y, int width, int height, const uint16_t* pixels, std::size_t count) {
             write_lvgl_region(x, y, width, height, pixels, count);
         },
-        [this](shell::ShellNavigationAction action) {
-            const int rc = k_msgq_put(&ui_action_queue_, &action, K_NO_WAIT);
+        [this](const shell::ShellInputInvocation& invocation) {
+            const int rc = k_msgq_put(&ui_action_queue_, &invocation, K_NO_WAIT);
             if (rc != 0) {
                 logger_.info("input",
                              "ui action queue put failed rc=" + std::to_string(rc));
@@ -336,11 +334,11 @@ bool ZephyrShellDisplayAdapter::initialize() {
     return true;
 }
 
-std::optional<shell::ShellNavigationAction> ZephyrShellDisplayAdapter::poll_ui_action() {
-    shell::ShellNavigationAction action {};
-    if (k_msgq_get(&ui_action_queue_, &action, K_NO_WAIT) == 0) {
+std::optional<shell::ShellInputInvocation> ZephyrShellDisplayAdapter::poll_ui_action() {
+    shell::ShellInputInvocation invocation {};
+    if (k_msgq_get(&ui_action_queue_, &invocation, K_NO_WAIT) == 0) {
         note_user_interaction("ui_action");
-        return action;
+        return invocation;
     }
     return std::nullopt;
 }
@@ -1085,8 +1083,6 @@ uint16_t ZephyrShellDisplayAdapter::color_for(shell::ShellSurface surface) const
             return 0xFFFF;
         case shell::ShellSurface::Launcher:
             return 0xFFE0;
-        case shell::ShellSurface::Files:
-            return 0xAFE5;
         case shell::ShellSurface::Settings:
             return 0x07FF;
         case shell::ShellSurface::Notifications:

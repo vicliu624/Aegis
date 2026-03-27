@@ -1,5 +1,6 @@
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -19,7 +20,30 @@ int main(int argc, char** argv) {
 
         aegis::core::AegisCore core(app_source, logger);
         core.boot(package_id);
-        if (argc > 2 && std::string(argv[2]) == "--shell-actions") {
+        if (argc > 2 && std::string(argv[2]) == "--probe-foreground-events") {
+            int step = 0;
+            core.set_foreground_input_pollers(
+                [&step]() -> std::optional<aegis::shell::ShellInputInvocation> {
+                    if (step == 0) {
+                        ++step;
+                        return aegis::shell::make_page_command_invocation(
+                            "demo_hello.main", "ping", "hello-0");
+                    }
+                    return std::nullopt;
+                },
+                [&step]() -> std::optional<aegis::shell::ShellNavigationAction> {
+                    if (step == 1) {
+                        ++step;
+                        return aegis::shell::ShellNavigationAction::Select;
+                    }
+                    if (step == 2) {
+                        ++step;
+                        return aegis::shell::ShellNavigationAction::Back;
+                    }
+                    return std::nullopt;
+                });
+            core.run_app("demo_hello");
+        } else if (argc > 2 && std::string(argv[2]) == "--shell-actions") {
             std::vector<aegis::shell::ShellNavigationAction> actions;
             for (int index = 3; index < argc; ++index) {
                 aegis::shell::ShellNavigationAction action {};

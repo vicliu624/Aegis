@@ -59,6 +59,27 @@ public:
                                   &output_size);
     }
 
+    int set_foreground_page(const aegis_ui_foreground_page_v1_t& page) const {
+        return api_->service_call(api_->user_data,
+                                  AEGIS_SERVICE_DOMAIN_UI,
+                                  AEGIS_UI_SERVICE_OP_SET_FOREGROUND_PAGE,
+                                  &page,
+                                  sizeof(page),
+                                  nullptr,
+                                  nullptr);
+    }
+
+    int poll_event(aegis_ui_routed_event_v1_t& out) const {
+        std::size_t output_size = sizeof(out);
+        return api_->service_call(api_->user_data,
+                                  AEGIS_SERVICE_DOMAIN_UI,
+                                  AEGIS_UI_SERVICE_OP_POLL_EVENT,
+                                  nullptr,
+                                  0,
+                                  &out,
+                                  &output_size);
+    }
+
 private:
     const aegis_host_api_v1_t* api_ {nullptr};
 };
@@ -192,6 +213,18 @@ public:
                                   AEGIS_STORAGE_SERVICE_OP_GET_STATUS,
                                   nullptr,
                                   0,
+                                  &out,
+                                  &output_size);
+    }
+
+    int list_directory(const aegis_storage_list_directory_request_v1_t& request,
+                       aegis_storage_list_directory_response_v1_t& out) const {
+        std::size_t output_size = sizeof(out);
+        return api_->service_call(api_->user_data,
+                                  AEGIS_SERVICE_DOMAIN_STORAGE,
+                                  AEGIS_STORAGE_SERVICE_OP_LIST_DIRECTORY,
+                                  &request,
+                                  sizeof(request),
                                   &out,
                                   &output_size);
     }

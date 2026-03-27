@@ -1,21 +1,23 @@
 #include "ports/zephyr/zephyr_logger.hpp"
 
-#include <string>
-
 #include <zephyr/sys/printk.h>
 
 namespace aegis::ports::zephyr {
 
 void ZephyrLogger::info(std::string_view category, std::string_view message) {
-    std::string category_text(category);
-    std::string message_text(message);
-    printk("[aegis][%s] %s\n", category_text.c_str(), message_text.c_str());
+    printk("[aegis][%.*s] %.*s\n",
+           static_cast<int>(category.size()),
+           category.data(),
+           static_cast<int>(message.size()),
+           message.data());
 }
 
 void ZephyrLogger::error(std::string_view category, std::string_view message) {
-    std::string category_text(category);
-    std::string message_text(message);
-    printk("[aegis][%s][error] %s\n", category_text.c_str(), message_text.c_str());
+    printk("[aegis][%.*s][error] %.*s\n",
+           static_cast<int>(category.size()),
+           category.data(),
+           static_cast<int>(message.size()),
+           message.data());
 }
 
 }  // namespace aegis::ports::zephyr

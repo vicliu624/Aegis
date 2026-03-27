@@ -6,8 +6,6 @@
 
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/kernel.h>
-
 #include "ports/zephyr/zephyr_gpio_pin.hpp"
 
 namespace aegis::ports::zephyr {
@@ -44,6 +42,9 @@ public:
     }
 
     void enable_interactive_mode() override {
+        if (interactive_mode_enabled_) {
+            return;
+        }
         interactive_mode_enabled_ = true;
         interactive_mode_started_ms_ = k_uptime_get_32();
         up_idle_level_ = pin_level(trackball_up_gpio_);
@@ -79,10 +80,13 @@ public:
             return std::nullopt;
         }
 
-        if (auto action = poll_trackball_action(); action.has_value()) {
-            return action;
+        if (const auto trackball_action = poll_trackball_action(); trackball_action.has_value()) {
+            return trackball_action;
         }
-        return poll_keyboard_action();
+        if (const auto keyboard_action = poll_keyboard_action(); keyboard_action.has_value()) {
+            return keyboard_action;
+        }
+        return std::nullopt;
     }
 
 private:

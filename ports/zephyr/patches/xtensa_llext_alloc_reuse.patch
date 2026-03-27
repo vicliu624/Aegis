@@ -1,0 +1,23 @@
+--- a/subsys/llext/llext_mem.c
++++ b/subsys/llext/llext_mem.c
+@@
+-		if (region->sh_type != SHT_NOBITS) {
+-			/* Region has data in the file, check if peek() is supported */
+-			ext->mem[mem_idx] = llext_peek(ldr, region->sh_offset);
+-			if (ext->mem[mem_idx]) {
++		if (region->sh_type != SHT_NOBITS) {
++			/*
++			 * Xtensa shared-library modules loaded from writable buffers should not
++			 * bind SHF_ALLOC regions directly to the source ELF image. Keeping some
++			 * alloc sections in the 0x3c... data-mapped window while others are
++			 * copied into internal RAM breaks relocation assumptions during link.
++			 * Force a real copy for all alloc regions so the module sees one
++			 * consistent loaded-memory layout.
++			 */
++			if (IS_ENABLED(CONFIG_XTENSA) && (region->sh_flags & SHF_ALLOC)) {
++				ext->mem[mem_idx] = NULL;
++			} else {
++				/* Region has data in the file, check if peek() is supported */
++				ext->mem[mem_idx] = llext_peek(ldr, region->sh_offset);
++			}
++			if (ext->mem[mem_idx]) {

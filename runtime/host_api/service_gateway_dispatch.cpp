@@ -167,10 +167,62 @@ int ServiceGatewayDispatch::call(uint32_t domain,
             if (op == AEGIS_STORAGE_SERVICE_OP_GET_STATUS) {
                 aegis_storage_status_v1_t status {};
                 status.available = services_.storage()->available() ? 1u : 0u;
+                status.sd_card_present = services_.storage()->sd_card_present() ? 1u : 0u;
                 copy_text(status.backend_name,
                           sizeof(status.backend_name),
                           services_.storage()->describe_backend());
+                copy_text(status.mount_root,
+                          sizeof(status.mount_root),
+                          services_.storage()->mount_root());
                 return copy_struct_result(status, output, output_size);
+            }
+            if (op == AEGIS_STORAGE_SERVICE_OP_LIST_DIRECTORY) {
+                if (input == nullptr ||
+                    input_size != sizeof(aegis_storage_list_directory_request_v1_t)) {
+                    return AEGIS_HOST_STATUS_INVALID_ARGUMENT;
+                }
+
+                const auto* request =
+                    static_cast<const aegis_storage_list_directory_request_v1_t*>(input);
+                const auto path = std::string(request->path);
+                const auto mount_root = services_.storage()->mount_root();
+
+                aegis_storage_list_directory_response_v1_t response {};
+                const auto path_is_sd = path == "/sdcard" || path.rfind("/sdcard/", 0) == 0;
+                if (path_is_sd && !services_.storage()->sd_card_present()) {
+                    response.status = AEGIS_STORAGE_LIST_STATUS_NO_CARD;
+                    return copy_struct_result(response, output, output_size);
+                }
+                if (path == mount_root && !services_.storage()->available()) {
+                    response.status = AEGIS_STORAGE_LIST_STATUS_UNAVAILABLE;
+                    return copy_struct_result(response, output, output_size);
+                }
+                if (!services_.storage()->directory_exists(path)) {
+                    response.status = AEGIS_STORAGE_LIST_STATUS_NOT_FOUND;
+                    return copy_struct_result(response, output, output_size);
+                }
+
+                const auto listed = services_.storage()->list_directory(path);
+                const auto max_entries = static_cast<std::size_t>(
+                    request->limit == 0
+                        ? AEGIS_STORAGE_DIRECTORY_ENTRY_MAX_V1
+                        : std::min<std::uint32_t>(request->limit,
+                                                  AEGIS_STORAGE_DIRECTORY_ENTRY_MAX_V1));
+                const auto offset = std::min<std::size_t>(request->offset, listed.size());
+                const auto count = std::min<std::size_t>(max_entries, listed.size() - offset);
+
+                response.status = AEGIS_STORAGE_LIST_STATUS_OK;
+                response.entry_count = static_cast<std::uint32_t>(count);
+                response.next_offset = static_cast<std::uint32_t>(offset + count);
+                response.has_more = response.next_offset < listed.size() ? 1u : 0u;
+                for (std::size_t index = 0; index < count; ++index) {
+                    const auto& entry = listed[offset + index];
+                    auto& out_entry = response.entries[index];
+                    out_entry.directory = entry.directory ? 1u : 0u;
+                    out_entry.size_bytes = static_cast<std::uint32_t>(entry.size_bytes);
+                    copy_text(out_entry.name, sizeof(out_entry.name), entry.name);
+                }
+                return copy_struct_result(response, output, output_size);
             }
             return AEGIS_HOST_STATUS_UNSUPPORTED;
 

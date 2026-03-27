@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string_view>
 #include <vector>
 
@@ -12,9 +13,21 @@ enum class ShellNavigationAction {
     Select,
     Back,
     OpenMenu,
-    OpenFiles,
     OpenSettings,
     OpenNotifications,
+};
+
+enum class ShellInputInvocationTarget {
+    SystemAction,
+    PageCommand,
+};
+
+struct ShellInputInvocation {
+    ShellInputInvocationTarget target {ShellInputInvocationTarget::SystemAction};
+    ShellNavigationAction system_action {ShellNavigationAction::OpenMenu};
+    std::array<char, 48> page_id {};
+    std::array<char, 32> page_command_id {};
+    std::array<char, 32> page_state_token {};
 };
 
 class ShellInputModel {
@@ -29,5 +42,12 @@ private:
 
 [[nodiscard]] std::string_view to_string(ShellNavigationAction action);
 [[nodiscard]] bool try_parse_shell_action(std::string_view value, ShellNavigationAction& action);
+[[nodiscard]] ShellInputInvocation make_system_invocation(ShellNavigationAction action);
+[[nodiscard]] ShellInputInvocation make_page_command_invocation(std::string_view page_id,
+                                                                std::string_view page_command_id,
+                                                                std::string_view page_state_token);
+[[nodiscard]] std::string_view invocation_page_id(const ShellInputInvocation& invocation);
+[[nodiscard]] std::string_view invocation_page_command_id(const ShellInputInvocation& invocation);
+[[nodiscard]] std::string_view invocation_page_state_token(const ShellInputInvocation& invocation);
 
 }  // namespace aegis::shell

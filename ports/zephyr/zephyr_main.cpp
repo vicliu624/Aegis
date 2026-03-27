@@ -207,6 +207,18 @@ extern "C" int main(void) {
         display_adapter.tick(16);
     }
     core.boot(aegis::ports::zephyr::kBootstrapDevicePackage);
+    core.set_foreground_input_pollers(
+        [&display_adapter]() -> std::optional<aegis::shell::ShellInputInvocation> {
+            return display_adapter.poll_ui_action();
+        },
+        [&input_adapter,
+         &display_adapter]() -> std::optional<aegis::shell::ShellNavigationAction> {
+            if (const auto action = input_adapter.poll_action(); action.has_value()) {
+                display_adapter.note_user_interaction("foreground_input");
+                return action;
+            }
+            return std::nullopt;
+        });
     board_runtime.signal_boot_stage(board_descriptor.bringup.interactive_ready_signal_stage);
     esp_rom_printf("AEGIS ROM: core boot complete\n");
     printk("AEGIS TRACE: core boot complete\n");
@@ -217,6 +229,8 @@ extern "C" int main(void) {
         boot_logger.info("zephyr", "boot self-test disabled");
         printk("AEGIS TRACE: selftest disabled\n");
     } else {
+        input_adapter.enable_interactive_mode();
+        boot_logger.info("zephyr", "interactive input enabled before boot self-test");
         printk("AEGIS TRACE: selftest launching %s\n", aegis::ports::zephyr::kBootSelftestAppId);
         boot_logger.info("zephyr",
                          "boot self-test launching app=" +
@@ -255,11 +269,19 @@ extern "C" int main(void) {
         const bool display_awake = display_adapter.display_is_awake();
         if (const auto ui_action = display_adapter.poll_ui_action(); ui_action.has_value()) {
             if (!display_awake) {
-                boot_logger.info("power",
-                                 "ignore ui wake action=" +
-                                     std::string(aegis::shell::to_string(*ui_action)));
+                if (ui_action->target == aegis::shell::ShellInputInvocationTarget::SystemAction) {
+                    boot_logger.info("power",
+                                     "ignore ui wake action=" +
+                                         std::string(aegis::shell::to_string(ui_action->system_action)));
+                } else {
+                    boot_logger.info("power",
+                                     "ignore sleeping ui page command page=" +
+                                         std::string(aegis::shell::invocation_page_id(*ui_action)) +
+                                         " command=" +
+                                         std::string(aegis::shell::invocation_page_command_id(*ui_action)));
+                }
             } else {
-            core.run_shell_action_sequence({*ui_action});
+                core.run_shell_input_sequence({*ui_action});
             }
         }
         if (const auto action = input_adapter.poll_action(); action.has_value()) {

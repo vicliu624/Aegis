@@ -114,6 +114,8 @@ Responsible for:
 - rendering system surfaces
 - device-aware layout adaptation
 - user interaction routing while shell owns foreground
+- consuming a structured page presentation contract
+- rendering page-declared softkeys after shell policy review
 
 ### 5.3 Shell control layer
 Responsible for:
@@ -122,6 +124,54 @@ Responsible for:
 - regaining control after exit/failure
 
 This helps prevent shell code from degenerating into a UI-only tangle.
+
+### 5.4 Shared page contract
+
+Shell presentation must be driven by structured page data rather than renderer
+heuristics.
+
+Every visible page should be able to describe:
+
+- page identity
+- visible content
+- available page commands
+- left / center / right softkeys
+- page state token for safe event routing
+
+This shared contract applies to:
+
+- shell-owned pages such as Home and Launcher
+- shell-owned control surfaces such as Settings
+- built-in system apps such as Files
+- app-owned foreground pages
+
+The renderer consumes this contract.
+It must not infer bottom-bar actions from page type alone.
+
+### 5.5 Softkey governance
+
+Softkeys are page-declared but system-governed.
+
+The shell must distinguish between:
+
+- system actions owned by Aegis
+- page commands owned by the current page
+
+Pages may request softkey labels and bindings, but the shell must review them
+before presentation so that it can:
+
+- preserve a predictable escape path
+- normalize invalid or misleading labels
+- disable commands that are unavailable in the current state
+- adapt output to the current device profile
+
+This is how Aegis keeps shell authority visible without forcing every page into
+the same renderer-owned hard-coded action table.
+
+In the current implementation, foreground app pages participate in this same
+contract through the Host API UI service. The app declares page identity,
+softkeys, and state token; the shell stores the approved page contract and the
+renderer consumes it just like any shell-owned page.
 
 ---
 
@@ -146,14 +196,17 @@ The conceptual role does not.
 ## 6.2 Launcher
 
 Purpose:
-- present the app catalog
-- show app icon, name, description, or key metadata
-- allow user to request app start
+- present built-in system entries and system-governed app entry points
+- show icon, name, and short operational context for each entry
+- allow user to request app start or a shell-owned route transition
 
-The launcher should be driven by:
-- `AppRegistry`
-- `LauncherModel`
-- app metadata from manifest
+The launcher should be driven by structured shell page presentation data.
+
+In practice that means:
+- the shell decides which entries are visible for the current product profile
+- each launcher tile is declared as page presentation data rather than renderer-local hard code
+- app-backed tiles may use app-owned icon resources
+- tile interaction is routed through declared page commands or launch requests
 
 The launcher does not load apps itself.  
 It requests that the runtime platform do so.
@@ -176,6 +229,36 @@ Settings may include:
 - app-visible but system-governed settings
 
 The settings surface belongs to the shell, not to any app.
+
+### 6.3a Files entry
+
+`Files` is a built-in product entry, but it should be implemented as a standard
+Aegis app package rather than a resident shell-only page.
+
+That means:
+
+- it has its own manifest, icon, and runtime entry symbol
+- it launches through normal runtime admission and lifecycle handling
+- it declares foreground pages through the UI Host API
+- it accesses storage through the storage service ABI
+- the repository copy of the package should stay complete enough for catalog discovery and host-side runtime fallback, rather than depending on shell-private assumptions about missing package files
+
+The shell may expose `Files` prominently in the main menu, but it should do so
+by issuing an app launch request, not by keeping a private `builtin.files`
+surface or shell-owned file-browser model.
+
+The launcher should therefore only retain product-level placement policy for
+`Files`:
+
+- whether it should be visible on the first screen
+- where it appears relative to other built-in entries
+- which app id it resolves to
+
+It should not retain:
+
+- a private Files data model
+- private Files renderer-only resources
+- a shell-owned alternate lifecycle path
 
 ---
 
@@ -312,14 +395,16 @@ This abstraction allows shell behavior to remain coherent across device classes.
 
 ## 10. Launcher model
 
-The launcher should be driven by a dedicated model object.
+The launcher should be driven by a dedicated model object or equivalent shell-owned
+entry model.
 
-A `LauncherModel` should represent:
+A launcher model should represent:
 
-- visible apps
+- visible built-in entries
+- shell-exposed app-backed entries
 - order/sorting
-- hidden/internal apps
-- invalid/incompatible apps
+- hidden/internal routes
+- invalid/incompatible app-backed entries
 - current selection/focus
 - category/grouping if used
 
@@ -327,7 +412,8 @@ The launcher should not directly scan the filesystem or parse manifests itself.
 
 That work belongs to app registry/platform layers.
 
-The shell consumes prepared app catalog data.
+The shell consumes prepared catalog or route data and emits a structured page
+contract for the renderer.
 
 ---
 
@@ -450,3 +536,9 @@ These documents define:
 - wireframes and screen contracts
 
 They should be treated as the implementation-facing shell design reference set.
+
+The runtime-facing foreground presentation rules are specified separately in:
+
+- [Aegis Foreground Page Contract](./foreground-page-contract.md)
+- [Aegis App Asset and Icon Contract](./app-assets-and-icons.md)
+- [Aegis App Runtime Memory Model](./app-runtime-memory-model.md)

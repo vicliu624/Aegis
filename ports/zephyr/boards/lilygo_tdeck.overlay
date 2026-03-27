@@ -179,6 +179,10 @@
 	cs-gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
 };
 
+&psram0 {
+	size = <DT_SIZE_M(8)>;
+};
+
 &i2s0 {
 	status = "okay";
 };

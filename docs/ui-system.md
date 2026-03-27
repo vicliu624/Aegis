@@ -318,6 +318,21 @@ These entries are built into the system design and should not be treated as ordi
 The shell is not just a launcher.
 Its visible behavior should enforce the system architecture.
 
+### 8.0 Presentation rule
+
+The shell must present pages through a structured presentation contract.
+
+That contract should include:
+
+- page identity
+- visible content
+- page commands
+- softkey declarations
+- command enablement state
+
+UI backends render this contract.
+They must not guess softkeys from a surface enum or page type.
+
 ### 8.1 Before app start
 
 The shell owns the foreground and input focus.
@@ -401,6 +416,11 @@ Back should be predictable:
 - inspector -> return to previous list or grid
 - top-level area -> return to Home
 - Home -> no destructive behavior by default
+
+On devices with a visible softkey bar, the right slot should default to a
+system-governed back path.
+Pages may request alternate wording where policy allows, but they should not
+remove the existence of a predictable system escape route.
 
 ### 10.4 Long-press behavior
 
@@ -632,8 +652,8 @@ Its job is persistent system presence.
 On devices with enough space, the shell should support a bottom action bar with three stable semantic slots:
 
 - left: primary page action
-- center: select or details
-- right: back or menu
+- center: select, inspect, confirm, or secondary page action
+- right: system back path by default
 
 Example semantics:
 
@@ -642,6 +662,24 @@ Example semantics:
 - `Apply / Select / Cancel`
 
 Devices without a visible softkey bar should still preserve the same semantic action mapping.
+
+These slots must be driven by page presentation data rather than renderer-owned
+hard-coded strings.
+
+Each slot should have a structured declaration that includes:
+
+- label
+- visible or hidden state
+- enabled or disabled state
+- semantic role
+- dispatch target
+- either a system action or a page command id
+
+The shell reviews this declaration and renders the approved result.
+
+Foreground apps participate in the same model.
+They may declare page commands and preferred softkey bindings, but the shell
+retains governance over final presentation and reserved system semantics.
 
 ---
 

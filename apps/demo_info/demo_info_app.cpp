@@ -12,6 +12,7 @@
 #include "sdk/include/aegis/services/time_service_abi.h"
 #include "sdk/include/aegis/services/ui_service_abi.h"
 
+#include <cstddef>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -163,6 +164,153 @@ int service_no_output(const aegis_host_api_v1_t* host_api, uint32_t domain, uint
         return -1;
     }
     return host_api->service_call(host_api->user_data, domain, op, nullptr, 0, nullptr, nullptr);
+}
+
+void configure_softkey(aegis_ui_softkey_v1_t& softkey,
+                       uint32_t role,
+                       const char* label,
+                       const char* command_id,
+                       bool visible,
+                       bool enabled) {
+    memset(&softkey, 0, sizeof(softkey));
+    softkey.visible = visible ? 1u : 0u;
+    softkey.enabled = enabled ? 1u : 0u;
+    softkey.role = role;
+    copy_text(softkey.label, sizeof(softkey.label), label);
+    copy_text(softkey.command_id, sizeof(softkey.command_id), command_id);
+}
+
+void declare_foreground_page(const aegis_host_api_v1_t* host_api, int ping_count) {
+    aegis_ui_foreground_page_v1_t page {};
+    char token[AEGIS_UI_PAGE_STATE_TOKEN_MAX_V1];
+    char context[AEGIS_UI_PAGE_CONTEXT_MAX_V1];
+
+    copy_text(page.page_id, sizeof(page.page_id), "demo_info.main");
+    copy_text(page.title, sizeof(page.title), "Demo Info");
+    {
+        size_t used = 0;
+        token[0] = '\0';
+        append_text(token, sizeof(token), used, "route-");
+        append_uint(token, sizeof(token), used, static_cast<uint32_t>(ping_count));
+    }
+    {
+        size_t used = 0;
+        context[0] = '\0';
+        append_text(context, sizeof(context), used, "Ping count ");
+        append_uint(context, sizeof(context), used, static_cast<uint32_t>(ping_count));
+    }
+    copy_text(page.page_state_token, sizeof(page.page_state_token), token);
+    copy_text(page.context, sizeof(page.context), context);
+
+    configure_softkey(page.softkeys[0],
+                      AEGIS_UI_SOFTKEY_ROLE_PRIMARY,
+                      "Ping",
+                      "ping",
+                      true,
+                      true);
+    configure_softkey(page.softkeys[1],
+                      AEGIS_UI_SOFTKEY_ROLE_CONFIRM,
+                      "Done",
+                      "done",
+                      true,
+                      true);
+    configure_softkey(page.softkeys[2],
+                      AEGIS_UI_SOFTKEY_ROLE_BACK,
+                      "",
+                      "",
+                      false,
+                      false);
+
+    host_api->service_call(host_api->user_data,
+                           AEGIS_SERVICE_DOMAIN_UI,
+                           AEGIS_UI_SERVICE_OP_SET_FOREGROUND_PAGE,
+                           &page,
+                           sizeof(page),
+                           nullptr,
+                           nullptr);
+}
+
+const char* routed_action_name(uint32_t action) {
+    switch (action) {
+        case AEGIS_UI_ROUTED_ACTION_MOVE_NEXT:
+            return "move_next";
+        case AEGIS_UI_ROUTED_ACTION_MOVE_PREVIOUS:
+            return "move_previous";
+        case AEGIS_UI_ROUTED_ACTION_PRIMARY:
+            return "primary";
+        case AEGIS_UI_ROUTED_ACTION_SELECT:
+            return "select";
+        case AEGIS_UI_ROUTED_ACTION_BACK:
+            return "back";
+        case AEGIS_UI_ROUTED_ACTION_OPEN_MENU:
+            return "open_menu";
+        case AEGIS_UI_ROUTED_ACTION_OPEN_FILES:
+            return "open_files";
+        case AEGIS_UI_ROUTED_ACTION_OPEN_SETTINGS:
+            return "open_settings";
+        case AEGIS_UI_ROUTED_ACTION_OPEN_NOTIFICATIONS:
+            return "open_notifications";
+        default:
+            return "none";
+    }
+}
+
+const char* event_source_name(uint32_t source) {
+    switch (source) {
+        case AEGIS_UI_EVENT_SOURCE_SOFTKEY_LEFT:
+            return "softkey_left";
+        case AEGIS_UI_EVENT_SOURCE_SOFTKEY_CENTER:
+            return "softkey_center";
+        case AEGIS_UI_EVENT_SOURCE_SOFTKEY_RIGHT:
+            return "softkey_right";
+        case AEGIS_UI_EVENT_SOURCE_PHYSICAL:
+            return "physical";
+        default:
+            return "unknown";
+    }
+}
+
+void log_routed_event(const aegis_host_api_v1_t* host_api, const aegis_ui_routed_event_v1_t& event) {
+    char message[256];
+    size_t used = 0;
+    message[0] = '\0';
+
+    append_text(message, sizeof(message), used, "routed_event:type=");
+    append_uint(message, sizeof(message), used, event.event_type);
+    append_text(message, sizeof(message), used, ", source=");
+    append_text(message, sizeof(message), used, event_source_name(event.event_source));
+    append_text(message, sizeof(message), used, ", action=");
+    append_text(message, sizeof(message), used, routed_action_name(event.routed_action));
+    append_text(message, sizeof(message), used, ", page=");
+    append_text(message, sizeof(message), used, event.page_id);
+    append_text(message, sizeof(message), used, ", token=");
+    append_text(message, sizeof(message), used, event.page_state_token);
+    append_text(message, sizeof(message), used, ", command=");
+    append_text(message, sizeof(message), used, event.command_id);
+    log_line(host_api, message);
+}
+
+int poll_routed_event(const aegis_host_api_v1_t* host_api, aegis_ui_routed_event_v1_t& event) {
+    if (host_api->service_call == nullptr) {
+        return -1;
+    }
+
+    size_t output_size = sizeof(event);
+    return host_api->service_call(host_api->user_data,
+                                  AEGIS_SERVICE_DOMAIN_UI,
+                                  AEGIS_UI_SERVICE_OP_POLL_EVENT,
+                                  nullptr,
+                                  0,
+                                  &event,
+                                  &output_size);
+}
+
+void spin_delay(uint32_t rounds) {
+    volatile uint32_t sink = 0;
+    for (uint32_t index = 0; index < rounds; ++index) {
+        sink += index;
+    }
+    (void)sink;
 }
 
 void log_capabilities(const aegis_host_api_v1_t* host_api) {
@@ -412,6 +560,60 @@ extern "C" aegis_app_run_result_v1_t demo_info_main(const aegis_host_api_v1_t* h
                                sizeof(notification_request),
                                nullptr,
                                nullptr);
+    }
+
+    declare_foreground_page(host_api, 0);
+    log_line(host_api, "foreground page declared for routed event test");
+
+    int ping_count = 0;
+    bool exit_requested = false;
+    uint32_t idle_slices = 0;
+    while (!exit_requested && idle_slices < 600u) {
+        aegis_ui_routed_event_v1_t event {};
+        const int poll_status = poll_routed_event(host_api, event);
+        if (poll_status != AEGIS_HOST_STATUS_OK) {
+            char message[128];
+            size_t used = 0;
+            message[0] = '\0';
+            append_text(message, sizeof(message), used, "ui.poll_event status=");
+            append_int(message, sizeof(message), used, poll_status);
+            log_line(host_api, message);
+            break;
+        }
+
+        if (event.event_type == AEGIS_UI_EVENT_TYPE_NONE) {
+            ++idle_slices;
+            spin_delay(1500000u);
+            continue;
+        }
+
+        idle_slices = 0;
+        log_routed_event(host_api, event);
+        if (event.event_type == AEGIS_UI_EVENT_TYPE_PAGE_COMMAND) {
+            if (strcmp(event.command_id, "ping") == 0) {
+                ++ping_count;
+                declare_foreground_page(host_api, ping_count);
+                continue;
+            }
+            if (strcmp(event.command_id, "done") == 0) {
+                exit_requested = true;
+                continue;
+            }
+        }
+
+        if (event.event_type == AEGIS_UI_EVENT_TYPE_ROUTED_ACTION) {
+            if (event.routed_action == AEGIS_UI_ROUTED_ACTION_PRIMARY ||
+                event.routed_action == AEGIS_UI_ROUTED_ACTION_SELECT) {
+                ++ping_count;
+                declare_foreground_page(host_api, ping_count);
+                continue;
+            }
+            if (event.routed_action == AEGIS_UI_ROUTED_ACTION_BACK) {
+                exit_requested = true;
+                continue;
+            }
+        }
+        spin_delay(1500000u);
     }
 
     if (host_api->timer_cancel != nullptr) {

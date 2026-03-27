@@ -29,6 +29,7 @@ list(FILTER AEGIS_SOURCES EXCLUDE REGEX ".*/zephyr_audio_service\\.cpp$")
 list(FILTER AEGIS_SOURCES EXCLUDE REGEX ".*/zephyr_hostlink_service\\.cpp$")
 list(FILTER AEGIS_SOURCES EXCLUDE REGEX ".*/zephyr_text_input_service\\.cpp$")
 list(FILTER AEGIS_SOURCES EXCLUDE REGEX ".*/zephyr_ui_service\\.cpp$")
+list(FILTER AEGIS_SOURCES EXCLUDE REGEX ".*/generated/zephyr/.*\\.cpp$")
 
 add_executable(aegis_host_sim ${AEGIS_SOURCES})
 

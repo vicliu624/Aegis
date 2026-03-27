@@ -1,5 +1,6 @@
 #include "core/aegis_core/aegis_core.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 #include "device/packages/mock_device_packages.hpp"
@@ -88,6 +89,13 @@ void AegisCore::attach_shell_presentation_sink(shell::ShellPresentationSink* sin
     shell_.set_presentation_sink(sink);
 }
 
+void AegisCore::set_foreground_input_pollers(
+    std::function<std::optional<shell::ShellInputInvocation>()> ui_invocation_poller,
+    std::function<std::optional<shell::ShellNavigationAction>()> routed_action_poller) {
+    foreground_ui_invocation_poller_ = std::move(ui_invocation_poller);
+    foreground_routed_action_poller_ = std::move(routed_action_poller);
+}
+
 void AegisCore::boot(const std::string& package_id) {
     logger_.info("core", "boot begin package=" + package_id);
     boot_artifacts_ = boot_.boot(package_id);
@@ -104,7 +112,6 @@ void AegisCore::boot(const std::string& package_id) {
     shell_.present_home();
     logger_.info("core", "present system surfaces");
     shell_.present_system_surfaces();
-    logger_.info("core", "build launcher catalog");
     const auto catalog = catalog_builder_.build(boot_artifacts_->app_registry,
                                                 boot_artifacts_->device_profile,
                                                 admission_policy_,
@@ -113,10 +120,14 @@ void AegisCore::boot(const std::string& package_id) {
                                                 runtime_policy_,
                                                 AEGIS_APP_ABI_VERSION_V1,
                                                 active_app_ids());
-    logger_.info("core", "load launcher catalog entries=" + std::to_string(catalog.entries().size()));
-    shell_.load_launcher_catalog(catalog);
-    logger_.info("core", "return shell to home after boot catalog load");
-    shell_.present_home();
+    shell_.present_launcher_catalog(catalog);
+    logger_.info("core",
+                 "launcher catalog hydrated entries=" +
+                     std::to_string(catalog.entries().size()));
+    logger_.info("core",
+                 "app registry ready entries=" +
+                     std::to_string(boot_artifacts_->app_registry.apps().size()) +
+                     " catalog-materialization=deferred");
     booted_ = true;
     logger_.info("core", "boot complete");
 }
@@ -197,6 +208,43 @@ void AegisCore::run_shell_action_sequence(const std::vector<shell::ShellNavigati
     }
 }
 
+void AegisCore::run_shell_input_sequence(const std::vector<shell::ShellInputInvocation>& invocations) {
+    if (!booted_) {
+        throw std::runtime_error("core must boot before shell inputs");
+    }
+
+    for (const auto& invocation : invocations) {
+        if (invocation.target == shell::ShellInputInvocationTarget::SystemAction) {
+            logger_.info("core",
+                         "shell system input begin " +
+                             std::string(shell::to_string(invocation.system_action)));
+        } else {
+            logger_.info("core",
+                         "shell page command begin page=" +
+                             std::string(shell::invocation_page_id(invocation)) + " command=" +
+                             std::string(shell::invocation_page_command_id(invocation)));
+        }
+
+        const auto launch_request = shell_.handle_input_invocation(invocation);
+
+        if (invocation.target == shell::ShellInputInvocationTarget::SystemAction) {
+            logger_.info("core",
+                         "shell system input end " +
+                             std::string(shell::to_string(invocation.system_action)));
+        } else {
+            logger_.info("core",
+                         "shell page command end page=" +
+                             std::string(shell::invocation_page_id(invocation)) + " command=" +
+                             std::string(shell::invocation_page_command_id(invocation)));
+        }
+
+        if (launch_request) {
+            logger_.info("core", "shell action launch request " + *launch_request);
+            run_app(*launch_request);
+        }
+    }
+}
+
 void AegisCore::run_descriptor(const AppDescriptor& descriptor) {
     shell_.clear_app_foreground_state();
     shell_.enter_app(descriptor.manifest.app_id);
@@ -207,10 +255,26 @@ void AegisCore::run_descriptor(const AppDescriptor& descriptor) {
     runtime::HostApi host_api(boot_artifacts_->device_profile,
                               boot_artifacts_->service_bindings,
                               ownership_,
+                              descriptor.app_dir,
                               session.id(),
                               descriptor.manifest.requested_permissions,
                               [this](const std::string& root_name) {
                                   shell_.set_app_foreground_root(root_name);
+                              },
+                              [this](const runtime::ForegroundPagePresentation& page) {
+                                  shell_.set_app_foreground_page(page);
+                              },
+                              [this]() -> std::optional<shell::ShellInputInvocation> {
+                                  if (!foreground_ui_invocation_poller_) {
+                                      return std::nullopt;
+                                  }
+                                  return foreground_ui_invocation_poller_();
+                              },
+                              [this]() -> std::optional<shell::ShellNavigationAction> {
+                                  if (!foreground_routed_action_poller_) {
+                                      return std::nullopt;
+                                  }
+                                  return foreground_routed_action_poller_();
                               },
                               [this](const std::string& tag, const std::string& message) {
                                   shell_.append_app_foreground_log(tag, message);
@@ -230,7 +294,11 @@ void AegisCore::run_descriptor(const AppDescriptor& descriptor) {
             throw std::runtime_error("load failed: " + load_result.detail);
         }
 
-        if (boot_artifacts_->service_bindings.text_input()) {
+        if (boot_artifacts_->service_bindings.text_input() &&
+            std::find(descriptor.manifest.requested_permissions.begin(),
+                      descriptor.manifest.requested_permissions.end(),
+                      AppPermissionId::TextInputFocus) !=
+                descriptor.manifest.requested_permissions.end()) {
             const auto status = host_api.request_text_input_focus();
             logger_.info("core",
                          std::string("text input foreground grant=") +

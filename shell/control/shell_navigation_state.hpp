@@ -7,7 +7,6 @@ namespace aegis::shell {
 enum class ShellSurface {
     Home,
     Launcher,
-    Files,
     Settings,
     Notifications,
     AppForeground,

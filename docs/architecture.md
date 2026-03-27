@@ -154,6 +154,11 @@ It includes:
 
 The shell is how users perceive the governed world of Aegis.
 
+The shell should expose a renderer-independent presentation contract that
+includes page data, page commands, and softkey declarations.
+Renderers consume this contract.
+They do not infer softkey meaning from page type.
+
 ---
 
 ## 4. System principle: hardware belongs to the system
@@ -208,6 +213,9 @@ Its purpose is to ensure the system always knows:
 - what needs cleanup on exit,
 - what an app is allowed to do,
 - and how the system can evolve without giving away hardware authority.
+
+The same rule applies to foreground UI:
+apps may describe page intent, but they should not directly own shell chrome.
 
 ---
 
@@ -270,3 +278,20 @@ Aegis is best understood as:
 - a governed native app platform,
 - a system-owned hardware world,
 - and a clear separation between **system authority** and **app workload**.
+
+---
+
+## 10. Related design references
+
+The architecture document gives the system-wide map.
+The detailed runtime constraints that repeatedly matter during app debugging are
+documented separately in:
+
+- [Aegis App Runtime Memory Model](./app-runtime-memory-model.md)
+- [Aegis LLEXT App Constraints](./llext-app-constraints.md)
+- [Aegis Foreground Page Contract](./foreground-page-contract.md)
+- [Aegis App Asset and Icon Contract](./app-assets-and-icons.md)
+
+These documents should be treated as implementation-facing companions to the
+main architecture, especially when investigating foreground app failures,
+unload safety, or package ownership mistakes.

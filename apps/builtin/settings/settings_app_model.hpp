@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "runtime/host_api/host_api.hpp"
+#include "shell/control/shell_input_model.hpp"
 #include "services/common/service_interfaces.hpp"
 
 namespace aegis::shell {
@@ -33,6 +35,13 @@ public:
     [[nodiscard]] const SettingsAppEntry* focused_entry() const;
     [[nodiscard]] const SettingsAppEntry* find_entry(const std::string& id) const;
     [[nodiscard]] std::string value_for(const SettingsAppEntry& entry) const;
+    [[nodiscard]] runtime::ForegroundPagePresentation page_presentation() const;
+    [[nodiscard]] bool handle_routed_action(
+        ShellNavigationAction action,
+        const std::shared_ptr<services::ISettingsService>& settings_service);
+    [[nodiscard]] bool handle_page_command(
+        std::string_view command_id,
+        const std::shared_ptr<services::ISettingsService>& settings_service);
 
 private:
     [[nodiscard]] static std::string settings_key_for(const std::string& id);

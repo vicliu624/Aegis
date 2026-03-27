@@ -1,0 +1,35 @@
+{
+  "app_id": "files",
+  "display_name": "Files",
+  "version": "0.1.0",
+  "abi_version": 1,
+  "binary": "app.llext",
+  "entry_symbol": "files_main",
+  "icon": "icon.bin",
+  "description": "Governed file browser for mounted Aegis storage roots.",
+  "required_capabilities": [
+    { "id": "display", "min_level": "full" }
+  ],
+  "optional_capabilities": [
+    { "id": "pointer_input", "min_level": "degraded" },
+    { "id": "joystick_input", "min_level": "degraded" },
+    { "id": "keyboard_input", "min_level": "degraded" },
+    { "id": "removable_storage", "min_level": "degraded" }
+  ],
+  "preferred_capabilities": [
+    { "id": "pointer_input", "min_level": "full" }
+  ],
+  "requested_permissions": [
+    "ui_surface",
+    "storage_access"
+  ],
+  "memory_budget": {
+    "heap_bytes": 24576,
+    "ui_bytes": 8192
+  },
+  "singleton": true,
+  "allow_background": false,
+  "category": "system",
+  "order_hint": 20,
+  "hidden": false
+}

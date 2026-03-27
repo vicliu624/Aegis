@@ -179,6 +179,7 @@ Purpose:
 * allow an app to create and destroy its UI root
 * allow the runtime to track app-owned UI structures
 * preserve teardown safety
+* allow a foreground app to describe page intent without taking shell ownership
 
 Typical functions:
 
@@ -190,6 +191,14 @@ Rules:
 
 * apps do not directly attach themselves to global shell structures
 * app UI ownership must remain session-bounded
+* shell-owned affordances such as softkeys remain system-governed even when an app owns the foreground
+
+Current UI-facing operations support:
+
+* foreground page declaration through the UI service
+* preferred softkey binding declaration for page-owned commands
+* page state token updates for stale-event rejection
+* semantic routed event delivery back to the app through UI polling
 
 ---
 
@@ -255,6 +264,12 @@ Possible service domains:
 * network
 * hostlink
 
+Current storage-facing expectations include:
+
+* status query, including mount root and SD-card presence
+* governed directory listing through the storage service ABI
+* no shell-private file model dependencies
+
 Rules:
 
 * app-facing contracts stay generic
@@ -301,6 +316,10 @@ The Host API must therefore cooperate with:
 
 Without this relationship, the API would lose governance value.
 
+For foreground UI, any page descriptor, command registration, or softkey binding
+owned by the app must also be attributable to the current session and revoked at
+session stop.
+
 ---
 
 ## 8. Relationship to ResourceOwnershipTable
@@ -318,6 +337,7 @@ Examples:
 * service handles
 * notifications
 * text-input focus grants
+* foreground page command registrations
 * future async work handles
 
 This is essential for clean exit and unload.
@@ -496,3 +516,15 @@ The Host API is the formal language through which Aegis says to apps:
 > but you do not own it.
 
 That is why the Host API is one of the central architectural boundaries in Aegis.
+
+---
+
+## 17. See also
+
+The Host API document defines the service boundary itself.
+For the runtime rules that decide how Host API data must be owned, copied, and
+revoked in practice, read:
+
+- [Aegis App Runtime Memory Model](./app-runtime-memory-model.md)
+- [Aegis LLEXT App Constraints](./llext-app-constraints.md)
+- [Aegis Foreground Page Contract](./foreground-page-contract.md)

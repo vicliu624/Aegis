@@ -13,7 +13,6 @@ public:
 
     void boot_to_home();
     void show_launcher();
-    void show_files();
     void show_settings();
     void show_notifications();
     void enter_app(const std::string& app_id);

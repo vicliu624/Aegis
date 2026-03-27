@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <utility>
 #include <string>
 #include <string_view>
@@ -23,7 +24,7 @@ class ZephyrLvglShellUi {
 public:
     using FlushCallback =
         std::function<void(int x, int y, int width, int height, const uint16_t* pixels, std::size_t count)>;
-    using ActionCallback = std::function<void(shell::ShellNavigationAction action)>;
+    using ActionCallback = std::function<void(const shell::ShellInputInvocation& invocation)>;
     using TouchReadCallback = std::function<bool(int16_t& x, int16_t& y, bool& pressed)>;
     using StatusDetailCallback = std::function<std::string()>;
     using ClockTextCallback = std::function<std::string()>;
@@ -50,7 +51,7 @@ public:
 private:
     struct TouchTarget {
         lv_obj_t* object {nullptr};
-        shell::ShellNavigationAction action {shell::ShellNavigationAction::OpenMenu};
+        shell::ShellInputInvocation invocation {};
         bool is_softkey {false};
         bool supports_pressed_feedback {false};
     };
@@ -70,21 +71,21 @@ private:
         bool dirty {false};
     };
 
-    struct FileEntryView {
-        std::string label;
-        std::string meta;
-        bool focused {false};
-        bool directory {false};
-    };
+    struct AppPackageIconCacheEntry {
+        struct LvMemDeleter {
+            void operator()(std::uint8_t* ptr) const {
+                if (ptr != nullptr) {
+                    lv_free(ptr);
+                }
+            }
+        };
 
-    struct BuiltinMenuEntry {
-        std::string id;
-        std::string label;
-        uint32_t color {0};
-        bool available {false};
-        bool use_files_icon {false};
-        bool use_settings_icon {false};
-        shell::ShellNavigationAction action {shell::ShellNavigationAction::OpenMenu};
+        std::string path;
+        std::unique_ptr<std::uint8_t, LvMemDeleter> payload;
+        std::size_t payload_size {0};
+        lv_image_dsc_t image {};
+        bool attempted {false};
+        bool valid {false};
     };
 
     enum class SoftkeySlot {
@@ -94,7 +95,6 @@ private:
     };
 
     static void display_flush_bridge(lv_display_t* display, const lv_area_t* area, uint8_t* px_map);
-    static void builtin_tile_event_bridge(lv_event_t* event);
     static void softkey_event_bridge(lv_event_t* event);
 
     void flush_display(const lv_area_t* area, uint8_t* px_map);
@@ -103,45 +103,39 @@ private:
     void build_shell_chrome();
     void clear_content();
     void update_top_bar(std::string_view route, std::string_view detail);
-    void update_softkeys(std::string_view left, std::string_view center, std::string_view right);
-    void update_files_softkey_state(bool info_enabled);
+    void update_softkeys(const std::array<shell::ShellSoftkeySpec, 3>& softkeys);
     void present_home(const shell::ShellPresentationFrame& frame);
     void present_launcher(const shell::ShellPresentationFrame& frame);
-    void present_files_surface(const shell::ShellPresentationFrame& frame);
-    void present_settings_surface(const shell::ShellPresentationFrame& frame);
+    void present_structured_surface(const shell::ShellPresentationFrame& frame);
     void present_generic_surface(const shell::ShellPresentationFrame& frame);
-    [[nodiscard]] std::vector<LauncherEntryView> parse_launcher_entries(
-        const shell::ShellPresentationFrame& frame) const;
-    [[nodiscard]] std::vector<SettingsEntryView> parse_settings_entries(
-        const shell::ShellPresentationFrame& frame) const;
-    [[nodiscard]] std::vector<FileEntryView> parse_file_entries(
-        const shell::ShellPresentationFrame& frame) const;
-    [[nodiscard]] std::array<std::string_view, 3> softkeys_for_surface(shell::ShellSurface surface) const;
-    [[nodiscard]] shell::ShellNavigationAction action_for_softkey(SoftkeySlot slot) const;
+    [[nodiscard]] shell::ShellInputInvocation invocation_for_softkey(SoftkeySlot slot) const;
     [[nodiscard]] static std::string trim(std::string_view value);
     [[nodiscard]] static std::string to_route_name(shell::ShellSurface surface);
     [[nodiscard]] lv_color_t hex(uint32_t rgb) const;
     [[nodiscard]] lv_obj_t* create_panel(lv_obj_t* parent) const;
-    [[nodiscard]] std::vector<BuiltinMenuEntry> builtin_menu_entries() const;
+    [[nodiscard]] const lv_image_dsc_t* find_app_icon_image(std::string_view icon_path) const;
+    [[nodiscard]] const lv_image_dsc_t* find_item_icon_image(
+        const shell::ShellPresentationItem& item) const;
+    [[nodiscard]] const char* find_symbol_icon(std::string_view key) const;
+    [[nodiscard]] AppPackageIconCacheEntry* find_or_create_icon_cache_entry(std::string_view path) const;
+    [[nodiscard]] bool load_app_package_icon(AppPackageIconCacheEntry& entry) const;
     void render_system_menu(const shell::ShellPresentationFrame& frame);
-    void create_builtin_tile(lv_obj_t* parent, const BuiltinMenuEntry& entry, bool focused);
+    void create_launcher_tile(lv_obj_t* parent,
+                              const shell::ShellPresentationFrame& frame,
+                              const shell::ShellPresentationItem& item);
     void update_status_icons();
     void update_status_clock();
     void update_touch_feedback();
-    void update_pending_action();
     void poll_touch_actions();
     void register_touch_target(lv_obj_t* object,
-                               shell::ShellNavigationAction action,
+                               shell::ShellInputInvocation invocation,
                                bool is_softkey = false,
                                bool supports_pressed_feedback = false);
     [[nodiscard]] TouchTarget* find_touch_target(int16_t x, int16_t y);
     void set_touch_target_pressed(TouchTarget* target, bool pressed);
     void set_softkey_pressed(SoftkeySlot slot, bool pressed);
     void clear_softkey_pressed_state();
-    void show_files_info_popup();
-    void hide_files_info_popup();
-    [[nodiscard]] bool files_info_available() const;
-    void dispatch_action(shell::ShellNavigationAction action);
+    void dispatch_invocation(const shell::ShellInputInvocation& invocation);
     void pump_once();
     void request_render();
 
@@ -173,9 +167,9 @@ private:
     lv_obj_t* softkey_left_ {nullptr};
     lv_obj_t* softkey_center_ {nullptr};
     lv_obj_t* softkey_right_ {nullptr};
-    lv_obj_t* files_info_popup_ {nullptr};
-    lv_obj_t* files_info_popup_title_ {nullptr};
-    lv_obj_t* files_info_popup_body_ {nullptr};
+    lv_obj_t* page_dialog_popup_ {nullptr};
+    lv_obj_t* page_dialog_popup_title_ {nullptr};
+    lv_obj_t* page_dialog_popup_body_ {nullptr};
     lv_obj_t* splash_wrap_ {nullptr};
     lv_obj_t* splash_logo_ {nullptr};
     lv_obj_t* splash_subtitle_label_ {nullptr};
@@ -200,12 +194,10 @@ private:
     SoftkeySlot softkey_left_id_ {SoftkeySlot::Left};
     SoftkeySlot softkey_center_id_ {SoftkeySlot::Center};
     SoftkeySlot softkey_right_id_ {SoftkeySlot::Right};
-    std::deque<shell::ShellNavigationAction> tile_actions_;
     std::vector<TouchTarget> touch_targets_;
-    std::vector<FileEntryView> current_file_entries_;
+    shell::ShellPresentationFrame active_frame_ {};
     shell::ShellSurface active_surface_ {shell::ShellSurface::Home};
     TouchTarget* touch_pressed_target_ {nullptr};
-    SoftkeySlot active_pressed_softkey_ {SoftkeySlot::Left};
     bool softkey_pressed_active_ {false};
     bool touch_tracking_active_ {false};
     bool touch_pressed_last_ {false};
@@ -216,16 +208,12 @@ private:
     StatusIcons last_status_icons_ {};
     bool last_status_icons_valid_ {false};
     uint32_t last_clock_update_ms_ {0};
-    uint32_t last_touch_sample_log_ms_ {0};
     uint32_t last_touch_poll_ms_ {0};
     TouchTarget* touch_feedback_target_ {nullptr};
     uint32_t touch_feedback_deadline_ms_ {0};
-    bool pending_action_active_ {false};
-    shell::ShellNavigationAction pending_action_ {shell::ShellNavigationAction::OpenMenu};
-    uint32_t pending_action_deadline_ms_ {0};
-    bool files_info_popup_visible_ {false};
     bool render_pending_ {false};
     uint32_t flush_count_ {0};
+    mutable std::deque<AppPackageIconCacheEntry> app_package_icon_cache_;
 };
 
 }  // namespace aegis::ports::zephyr

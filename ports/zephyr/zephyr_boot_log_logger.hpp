@@ -17,9 +17,7 @@ public:
     void error(std::string_view category, std::string_view message) override;
 
 private:
-    platform::Logger& delegate_;
-    ZephyrShellDisplayAdapter* display_ {nullptr};
-    mutable k_mutex mutex_ {};
+    platform::Logger* delegate_ {nullptr};
 };
 
 }  // namespace aegis::ports::zephyr

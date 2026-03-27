@@ -84,7 +84,6 @@ ShellSurfaceProfile MockDeviceAPackage::create_shell_surface_profile() const {
                 shell::ShellNavigationAction::Select,
                 shell::ShellNavigationAction::Back,
                 shell::ShellNavigationAction::OpenMenu,
-                shell::ShellNavigationAction::OpenFiles,
                 shell::ShellNavigationAction::OpenSettings,
             },
     };
@@ -191,7 +190,6 @@ ShellSurfaceProfile MockDeviceBPackage::create_shell_surface_profile() const {
                 shell::ShellNavigationAction::PrimaryAction,
                 shell::ShellNavigationAction::Select,
                 shell::ShellNavigationAction::Back,
-                shell::ShellNavigationAction::OpenFiles,
                 shell::ShellNavigationAction::OpenSettings,
                 shell::ShellNavigationAction::OpenNotifications,
             },

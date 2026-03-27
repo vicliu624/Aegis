@@ -38,7 +38,9 @@ They should not feel like:
 
 ## 3. Built-in entries vs normal apps
 
-Built-in system entries are not the same thing as normal Aegis apps.
+Built-in system entries are not the same thing as ordinary third-party products.
+However, when one of these entries is implemented as an Aegis app package, it
+should still use the same governed app mechanisms as any other app.
 
 ### 3.1 Built-in system entries
 
@@ -48,6 +50,7 @@ Built-in system entries are:
 - product-defining
 - expected to exist on every user-facing device build unless a device profile explicitly excludes one
 - part of shell information architecture
+- allowed to ship as standard app packages when that creates cleaner lifecycle and packaging boundaries
 
 ### 3.2 Normal apps
 
@@ -63,6 +66,11 @@ Normal apps are:
 The shell may visually present built-in system entries in the same launcher language as apps if that improves user clarity.
 
 However, semantically they remain system entries rather than ordinary guest workloads.
+
+Implementation rule:
+
+- being built-in does not justify bypassing manifest, app package, runtime admission, Host API, or service ABI paths
+- if a built-in entry is implemented as an app, it should exist as a real app package in the repository and in deployed storage
 
 ---
 
@@ -196,6 +204,15 @@ Product policy:
 - built-in
 - not uninstallable
 - high-frequency user tool
+
+Implementation notes:
+
+- `Files` should ship as a standard Aegis app package with `manifest.json`, `icon.bin`, and `app.llext`
+- it should launch through the normal runtime loader path
+- storage browsing should use the storage service ABI rather than shell-private models
+- the shell may expose a direct `Files` tile, but that tile should resolve to an app launch request
+- app-owned UI resources such as launcher icon, file glyphs, and page icons should live in the `Files` package rather than in shell or port-private asset buckets
+- the repository package itself should remain structurally complete for discovery and host-side tooling, which means the `Files` directory should carry the same package-level files expected of other app packages even when Zephyr deploy builds later replace the placeholder `app.llext` with a real module image
 
 ### 6.4 Device
 
@@ -441,18 +458,27 @@ The exact first-screen arrangement may vary by product, but the built-in list it
 
 ## 9. Relationship to app registry
 
-Built-in system entries should not be modeled as if they were ordinary manifest-discovered third-party apps.
+Built-in system entries remain system-owned product features, but some of them
+may and should be implemented as ordinary Aegis app packages when that creates
+cleaner lifecycle, packaging, and resource boundaries.
 
-The shell may present them in a launcher-like surface, but internally they should be identified as:
+That means the shell may keep ownership of:
 
-- system-owned entries
-- built-in routes
-- or shell-controlled built-in tools
+- information architecture
+- ordering and visibility policy
+- uninstall policy
+- launcher prominence
 
-This preserves the architectural distinction between:
+while still delegating execution to:
 
-- shell/system authority
-- guest app catalog
+- manifest-discovered app packages
+- normal runtime admission
+- Host API and service ABI paths
+
+This preserves the distinction between:
+
+- shell/system authority over product structure
+- app/runtime governance over executable workloads
 
 ---
 

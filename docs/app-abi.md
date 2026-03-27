@@ -55,6 +55,8 @@ The App ABI covers:
 - shared public structure layouts
 - status/result conventions
 - opaque handle usage
+- app-facing foreground page declaration structures where supported
+- page command and routed UI event contracts where supported
 - compatibility versioning rules
 
 The App ABI does **not** cover:
@@ -173,6 +175,10 @@ This means:
 
 The Host API is not just a source-level interface.
 It is part of the runtime binary contract.
+
+If apps are allowed to describe foreground pages, command bindings, or receive
+shell-routed page events, those structures are also part of the ABI surface and
+must be versioned with the same discipline.
 
 ---
 
@@ -318,6 +324,40 @@ The ABI defines:
 * what that entry symbol means
 * how Host API is passed
 * which binary layouts are valid
+
+---
+
+## 16. Foreground page contract
+
+If an app owns the foreground, it should still participate in a shell-governed
+UI contract rather than directly owning shell chrome.
+
+The app-facing contract should support description of:
+
+* page identity
+* page context
+* page commands
+* preferred softkey bindings
+* command enablement state
+
+The shell then reviews and renders that declaration.
+
+---
+
+## 17. Routed input events
+
+Foreground apps should receive semantic routed events rather than depending on
+raw board-specific button identities for primary page interaction.
+
+Examples include:
+
+* page command invoked
+* softkey left invoked
+* softkey center invoked
+* move next
+* move previous
+* select
+* back requested
 * how compatibility is evaluated
 
 The manifest declares intent.
@@ -432,3 +472,28 @@ The Aegis App ABI exists to make one thing possible:
 > without turning runtime compatibility into guesswork.
 
 That is why ABI discipline is foundational to Aegis.
+
+Foreground page declaration and routed UI events are now part of that practical
+ABI surface. In the current implementation, apps can:
+
+* declare a foreground page through `AEGIS_UI_SERVICE_OP_SET_FOREGROUND_PAGE`
+* publish page softkeys and command ids as ABI data
+* update page state tokens as page state changes
+* poll semantic routed events through `AEGIS_UI_SERVICE_OP_POLL_EVENT`
+* query storage readiness through `AEGIS_STORAGE_SERVICE_OP_GET_STATUS`
+* enumerate governed directories through `AEGIS_STORAGE_SERVICE_OP_LIST_DIRECTORY`
+
+That keeps app interaction board-agnostic while preserving shell governance.
+
+---
+
+## 21. See also
+
+The ABI document defines the formal binary boundary.
+The following companion documents define the practical constraints that make the
+ABI safe to use in real apps:
+
+- [Aegis App Runtime Memory Model](./app-runtime-memory-model.md)
+- [Aegis LLEXT App Constraints](./llext-app-constraints.md)
+- [Aegis Foreground Page Contract](./foreground-page-contract.md)
+- [Aegis App Asset and Icon Contract](./app-assets-and-icons.md)

@@ -3,6 +3,7 @@
 #include <optional>
 #include <vector>
 
+#include "runtime/host_api/host_api.hpp"
 #include "core/app_registry/app_catalog.hpp"
 #include "device/common/binding/service_binding_registry.hpp"
 #include "device/common/profile/shell_surface_profile.hpp"
@@ -12,7 +13,6 @@
 #include "shell/control/shell_input_model.hpp"
 #include "shell/launcher/launcher_model.hpp"
 #include "shell/presentation/shell_presentation_sink.hpp"
-#include "apps/builtin/files/files_app_model.hpp"
 #include "apps/builtin/settings/settings_app_model.hpp"
 #include "shell/settings/settings_model.hpp"
 #include "shell/status/notification_model.hpp"
@@ -36,8 +36,10 @@ public:
     void return_from_app(const std::string& app_id) const;
     void set_app_foreground_root(std::string root_name);
     void append_app_foreground_log(std::string tag, std::string message);
+    void set_app_foreground_page(runtime::ForegroundPagePresentation page);
     void clear_app_foreground_state();
     [[nodiscard]] std::optional<std::string> handle_action(ShellNavigationAction action);
+    [[nodiscard]] std::optional<std::string> handle_input_invocation(const ShellInputInvocation& invocation);
 
     [[nodiscard]] const SettingsModel& settings_model() const;
     [[nodiscard]] const SettingsAppModel& settings_app_model() const;
@@ -47,29 +49,34 @@ public:
     [[nodiscard]] const ShellInputModel& input_model() const;
 
 private:
-    enum class SystemLauncherTarget {
-        None,
-        Files,
-        Settings,
-    };
-
     struct SystemLauncherEntry {
         std::string id;
         std::string label;
         std::string subtitle;
+        std::string fallback_label;
+        std::string fallback_subtitle;
         bool available {false};
-        SystemLauncherTarget target {SystemLauncherTarget::None};
+        bool opens_shell_settings {false};
+        std::string command_id;
+        ShellPresentationIconSource icon_source {ShellPresentationIconSource::None};
+        std::string icon_key;
+        std::string package_app_id;
     };
 
     void initialize_system_launcher();
-    void reload_files_app();
+    void sync_system_launcher_with_catalog(const core::AppCatalog& catalog);
     void initialize_settings_app();
     [[nodiscard]] const SystemLauncherEntry* focused_system_launcher_entry() const;
     bool focus_system_launcher_next();
     bool focus_system_launcher_previous();
     void reload_settings_app();
     void apply_settings_app();
+    [[nodiscard]] std::optional<std::string> dispatch_system_launcher_entry(std::size_t index);
+    [[nodiscard]] std::optional<std::string> dispatch_system_launcher_command(std::string_view command_id);
     [[nodiscard]] static LauncherModel make_launcher_model(const core::AppCatalog& catalog);
+    [[nodiscard]] std::optional<std::string> handle_page_command(std::string_view page_id,
+                                                                 std::string_view page_command_id,
+                                                                 std::string_view page_state_token);
     void present_frame(std::string headline, std::string detail) const;
     [[nodiscard]] ShellPresentationFrame build_frame(std::string headline, std::string detail) const;
     void log_launcher_focus() const;
@@ -79,13 +86,13 @@ private:
     device::DeviceProfile device_profile_;
     struct AppForegroundState {
         std::string root_name;
+        std::optional<runtime::ForegroundPagePresentation> page;
         std::vector<ShellPresentationLine> lines;
     };
     mutable ShellController controller_;
     ShellPresentationSink* presentation_sink_ {nullptr};
     ShellInputModel input_;
     SettingsModel settings_;
-    FilesAppModel files_app_;
     SettingsAppModel settings_app_;
     StatusModel status_;
     NotificationModel notifications_;
@@ -93,7 +100,6 @@ private:
     std::vector<SystemLauncherEntry> system_launcher_;
     std::size_t system_launcher_focus_index_ {0};
     std::shared_ptr<services::ISettingsService> settings_service_;
-    std::shared_ptr<services::IStorageService> storage_service_;
     std::shared_ptr<services::INotificationService> notification_service_;
     bool startup_page_launcher_ {false};
     bool launcher_focus_wrap_ {true};

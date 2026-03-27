@@ -88,6 +88,9 @@ public:
     [[nodiscard]] bool probe_keyboard_controller();
     [[nodiscard]] bool probe_touch_controller();
     [[nodiscard]] bool probe_battery_controller();
+    [[nodiscard]] bool start_keyboard_sampler();
+    [[nodiscard]] bool keyboard_pending_character_count(uint8_t& pending) const;
+    [[nodiscard]] bool keyboard_pop_character(uint8_t& raw_character) const;
     [[nodiscard]] bool keyboard_read_character(uint8_t& raw_character) const;
     [[nodiscard]] bool read_touch_point(int16_t& x, int16_t& y, bool& pressed) const;
     [[nodiscard]] std::optional<int> battery_percent() const;
@@ -150,6 +153,9 @@ private:
     [[nodiscard]] int battery_percent_from_mv(int mv) const;
     [[nodiscard]] bool set_display_backlight_percent_unlocked(uint8_t percent) const;
     [[nodiscard]] bool set_keyboard_backlight_level_unlocked(uint8_t level) const;
+    [[nodiscard]] bool read_keyboard_character_unlocked(uint8_t& raw_character) const;
+    static void keyboard_sampler_thread_entry(void* p1, void* p2, void* p3);
+    void sample_keyboard_once() const;
 
     platform::Logger& logger_;
     ZephyrBoardBackendConfig config_;
@@ -171,6 +177,11 @@ private:
     mutable std::array<bool, 3> power_state_ {};
     mutable uint8_t display_backlight_percent_ {100};
     mutable uint8_t keyboard_backlight_level_ {127};
+    mutable k_msgq keyboard_character_queue_ {};
+    mutable std::array<uint8_t, 32> keyboard_character_queue_storage_ {};
+    mutable k_thread keyboard_sampler_thread_ {};
+    mutable k_tid_t keyboard_sampler_tid_ {nullptr};
+    mutable bool keyboard_sampler_started_ {false};
 };
 
 }  // namespace aegis::ports::zephyr

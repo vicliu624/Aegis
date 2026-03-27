@@ -1,8 +1,8 @@
-#include "ports/zephyr/zephyr_lvgl_assets.hpp"
+#include "apps/files/generated/zephyr/files_app_lvgl_assets.hpp"
 
-namespace aegis::ports::zephyr {
+namespace aegis::apps::files::ui {
 
-static const uint8_t g_files_icon_image_data[] = {
+static const uint8_t g_files_app_launcher_icon_image_data[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -437,7 +437,7 @@ static const uint8_t g_files_icon_image_data[] = {
     0x19, 0x20, 0x25, 0x27, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2B, 0x24, 0x21, 0x1B, 0x0E, 0x04, 0x02,
 };
 
-const lv_image_dsc_t g_files_icon_image = {
+const lv_image_dsc_t g_files_app_launcher_icon_image = {
     .header = {
         .magic = LV_IMAGE_HEADER_MAGIC,
         .cf = LV_COLOR_FORMAT_RGB565A8,
@@ -448,9 +448,9 @@ const lv_image_dsc_t g_files_icon_image = {
         .reserved_2 = 0,
     },
     .data_size = 6912,
-    .data = g_files_icon_image_data,
+    .data = g_files_app_launcher_icon_image_data,
     .reserved = nullptr,
     .reserved_2 = nullptr,
 };
 
-}  // namespace aegis::ports::zephyr
+}  // namespace aegis::apps::files::ui

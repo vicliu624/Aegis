@@ -159,6 +159,84 @@ std::string SettingsAppModel::value_for(const SettingsAppEntry& entry) const {
     return entry.options[index];
 }
 
+runtime::ForegroundPagePresentation SettingsAppModel::page_presentation() const {
+    runtime::ForegroundPagePresentation page;
+    page.items.reserve(std::min<std::size_t>(entries_.size(), 8U));
+    page.page_id = "builtin.settings";
+    page.page_state_token =
+        "settings:" + std::to_string(focus_index_) + ":" + std::to_string(dirty_count());
+    page.title = "Settings";
+    page.context = {};
+    page.layout_template = runtime::ForegroundPageTemplate::ValueList;
+    page.softkeys[0] = {
+        .label = "Apply",
+        .command_id = "apply",
+        .role = AEGIS_UI_SOFTKEY_ROLE_PRIMARY,
+        .visible = true,
+        .enabled = has_dirty_entries(),
+    };
+    page.softkeys[1] = {
+        .label = "Select",
+        .command_id = "select",
+        .role = AEGIS_UI_SOFTKEY_ROLE_CONFIRM,
+        .visible = true,
+        .enabled = focused_entry() != nullptr,
+    };
+
+    for (std::size_t index = 0; index < entries_.size() && page.items.size() < 8; ++index) {
+        const auto& entry = entries_[index];
+        if (!entry.visible) {
+            continue;
+        }
+        page.items.push_back({
+            .item_id = entry.id,
+            .label = entry.label,
+            .detail = value_for(entry),
+            .focused = index == focus_index_,
+            .emphasized = index == focus_index_,
+            .warning = entry.draft_index != entry.committed_index,
+            .disabled = false,
+            .accessory = runtime::ForegroundPageItemAccessory::None,
+        });
+    }
+
+    return page;
+}
+
+bool SettingsAppModel::handle_routed_action(
+    ShellNavigationAction action,
+    const std::shared_ptr<services::ISettingsService>& settings_service) {
+    switch (action) {
+        case ShellNavigationAction::MoveNext:
+            return focus_next(true);
+        case ShellNavigationAction::MovePrevious:
+            return focus_previous(true);
+        case ShellNavigationAction::PrimaryAction:
+            return apply(settings_service);
+        case ShellNavigationAction::Select:
+            return cycle_focused_option();
+        case ShellNavigationAction::Back:
+        case ShellNavigationAction::OpenMenu:
+        case ShellNavigationAction::OpenSettings:
+        case ShellNavigationAction::OpenNotifications:
+            return false;
+    }
+
+    return false;
+}
+
+bool SettingsAppModel::handle_page_command(
+    std::string_view command_id,
+    const std::shared_ptr<services::ISettingsService>& settings_service) {
+    if (command_id == "apply") {
+        return apply(settings_service);
+    }
+    if (command_id == "select") {
+        return cycle_focused_option();
+    }
+    return false;
+}
+
 std::string SettingsAppModel::settings_key_for(const std::string& id) {
     return "builtin.settings." + id;
 }

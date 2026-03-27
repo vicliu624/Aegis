@@ -32,6 +32,7 @@ bool ZephyrTdeckBoardRuntime::initialize() {
     battery_ready_ = board_control_provider_.probe_battery_controller();
     touch_ready_ = board_control_provider_.probe_touch_controller();
     const bool keyboard_ok = board_control_provider_.probe_keyboard_controller();
+    const bool keyboard_sampler_ok = keyboard_ok && board_control_provider_.start_keyboard_sampler();
     initialized_ = devices_ready;
     logger_.info("board",
                  "tdeck runtime complete devices=" + std::string(devices_ready ? "ready" : "degraded") +
@@ -39,6 +40,7 @@ bool ZephyrTdeckBoardRuntime::initialize() {
                      " board-control=" + std::string(board_control_provider_.ready() ? "ready" : "missing") +
                      " power-init=" + std::string(power_ready ? "ready" : "degraded") +
                      " keyboard=" + std::string(keyboard_ok ? "ready" : "missing") +
+                     " keyboard-sampler=" + std::string(keyboard_sampler_ok ? "ready" : "missing") +
                      " touch=" + std::string(touch_ready_ ? "ready" : "missing") +
                      " battery=" + std::string(battery_ready_ ? "ready" : "missing") +
                      " gps=" + std::string(gps_ready() ? "ready" : "gated"));
@@ -112,6 +114,12 @@ std::string ZephyrTdeckBoardRuntime::coordination_domain_owner_name(ZephyrBoardC
 }
 
 bool ZephyrTdeckBoardRuntime::keyboard_ready() const { return board_control_provider_.keyboard_ready(); }
+bool ZephyrTdeckBoardRuntime::keyboard_pending_event_count(uint8_t& pending) const {
+    return board_control_provider_.keyboard_pending_character_count(pending);
+}
+bool ZephyrTdeckBoardRuntime::keyboard_read_event(uint8_t& raw_event) const {
+    return board_control_provider_.keyboard_pop_character(raw_event);
+}
 bool ZephyrTdeckBoardRuntime::touch_ready() const { return touch_ready_; }
 bool ZephyrTdeckBoardRuntime::battery_ready() const { return battery_ready_; }
 int ZephyrTdeckBoardRuntime::battery_percent() const {
@@ -172,7 +180,7 @@ bool ZephyrTdeckBoardRuntime::set_gps_enabled(bool enabled) {
 }
 bool ZephyrTdeckBoardRuntime::gps_enabled() const { return gps_enabled_; }
 bool ZephyrTdeckBoardRuntime::keyboard_read_character(uint8_t& raw_character) const {
-    return board_control_provider_.keyboard_read_character(raw_character);
+    return board_control_provider_.keyboard_pop_character(raw_character);
 }
 bool ZephyrTdeckBoardRuntime::touch_read_point(int16_t& x, int16_t& y, bool& pressed) const {
     return board_control_provider_.read_touch_point(x, y, pressed);

@@ -32,6 +32,8 @@ public:
     [[nodiscard]] std::string coordination_domain_coordinator_name(ZephyrBoardCoordinationDomain domain) const override;
     [[nodiscard]] std::string coordination_domain_owner_name(ZephyrBoardCoordinationDomain domain) const override;
     [[nodiscard]] bool keyboard_ready() const override;
+    [[nodiscard]] bool keyboard_pending_event_count(uint8_t& pending) const override;
+    [[nodiscard]] bool keyboard_read_event(uint8_t& raw_event) const override;
     [[nodiscard]] bool touch_ready() const override;
     [[nodiscard]] bool battery_ready() const override;
     [[nodiscard]] int battery_percent() const override;

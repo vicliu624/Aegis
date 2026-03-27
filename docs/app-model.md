@@ -212,3 +212,14 @@ The Aegis app model exists to make one statement real:
 
 > apps may be native, independent, and powerful,  
 > but they are still guests in a system-owned world.
+
+---
+
+## 11. See also
+
+For the package and runtime details that this high-level model intentionally does
+not spell out, read:
+
+- [Aegis App Asset and Icon Contract](./app-assets-and-icons.md)
+- [Aegis App Runtime Memory Model](./app-runtime-memory-model.md)
+- [Aegis LLEXT App Constraints](./llext-app-constraints.md)

@@ -13,6 +13,11 @@ It defines:
 - state expectations
 - transition expectations
 
+Unless explicitly stated otherwise, the softkey labels shown in this document
+are examples of approved outputs from the page presentation contract.
+They are not intended to imply that a renderer hard-codes labels from screen
+type alone.
+
 ---
 
 ## 2. Home

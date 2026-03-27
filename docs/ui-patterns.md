@@ -71,6 +71,11 @@ Responsibilities:
 - reduce hidden interaction cost
 - make non-touch operation learnable
 
+Implementation rule:
+
+- the row is rendered from page presentation data
+- it is not generated from page-type heuristics inside the renderer
+
 ---
 
 ## 3. Layout density rules
@@ -171,6 +176,13 @@ These actions should be mapped by board packages without changing shell logic.
 
 When a softkey bar is shown, semantics should be consistent.
 
+Consistency applies to semantic role and routing policy, not to a renderer-owned
+string table.
+
+Pages declare desired bindings.
+The shell reviews them.
+The renderer displays the reviewed result.
+
 ### 6.1 Left slot
 
 Use for the primary task-level action.
@@ -194,7 +206,7 @@ Examples:
 
 ### 6.3 Right slot
 
-Use for navigation escape or menu.
+Use for navigation escape by default.
 
 Examples:
 
@@ -206,6 +218,30 @@ Examples:
 
 Do not swap semantics casually between pages.
 A user should be able to predict action intent before reading the labels in detail.
+
+### 6.5 Command binding rule
+
+Each softkey slot should bind to either:
+
+- a system action
+- a page command
+
+This keeps touch input, hardware keys, and alternate renderers aligned behind
+one interaction model.
+
+### 6.6 Disabled commands
+
+If a page command is unavailable in the current state, the corresponding
+softkey should usually remain visible but disabled when that improves
+learnability.
+
+Examples:
+
+- `Info` disabled on a directory row
+- `Apply` disabled when there are no pending changes
+
+The renderer should display disabled state clearly.
+It should not silently replace the command with a different action.
 
 ---
 

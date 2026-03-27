@@ -31,8 +31,7 @@ namespace aegis::runtime {
 
 bool can_resolve_compiled_entry_symbol(const std::string& entry_symbol) {
     return entry_symbol == "demo_background_main" || entry_symbol == "demo_hello_main" ||
-           entry_symbol == "demo_info_main" ||
-           entry_symbol == "demo_hostlink_main";
+           entry_symbol == "demo_info_main" || entry_symbol == "demo_hostlink_main";
 }
 
 sdk::AppRuntimeContract resolve_compiled_contract(const std::string& entry_symbol) {

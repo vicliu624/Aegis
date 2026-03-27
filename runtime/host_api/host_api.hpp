@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -15,17 +16,79 @@
 #include "runtime/host_api/service_gateway_dispatch.hpp"
 #include "runtime/ownership/resource_ownership_table.hpp"
 #include "sdk/include/aegis/host_api_abi.h"
+#include "sdk/include/aegis/services/ui_service_abi.h"
+#include "shell/control/shell_input_model.hpp"
 
 namespace aegis::runtime {
+
+struct ForegroundPageSoftkeyState {
+    std::string label;
+    std::string command_id;
+    std::uint32_t role {AEGIS_UI_SOFTKEY_ROLE_CUSTOM};
+    bool visible {false};
+    bool enabled {false};
+};
+
+enum class ForegroundPageTemplate {
+    TextLog,
+    SimpleList,
+    ValueList,
+    FileList,
+};
+
+enum class ForegroundPageItemAccessory {
+    None,
+    File,
+    Folder,
+};
+
+enum class ForegroundPageItemIconSource {
+    None,
+    AppAsset,
+};
+
+struct ForegroundPageItem {
+    std::string item_id;
+    std::string label;
+    std::string detail;
+    bool focused {false};
+    bool emphasized {false};
+    bool warning {false};
+    bool disabled {false};
+    ForegroundPageItemAccessory accessory {ForegroundPageItemAccessory::None};
+    ForegroundPageItemIconSource icon_source {ForegroundPageItemIconSource::None};
+    std::string icon_key;
+};
+
+struct ForegroundPageDialog {
+    bool visible {false};
+    std::string title;
+    std::string body;
+};
+
+struct ForegroundPagePresentation {
+    std::string page_id;
+    std::string page_state_token;
+    std::string title;
+    std::string context;
+    ForegroundPageTemplate layout_template {ForegroundPageTemplate::TextLog};
+    std::array<ForegroundPageSoftkeyState, 3> softkeys {};
+    std::vector<ForegroundPageItem> items;
+    ForegroundPageDialog dialog {};
+};
 
 class HostApi {
 public:
     HostApi(const device::DeviceProfile& profile,
             device::ServiceBindingRegistry& services,
             ResourceOwnershipTable& ownership,
+            std::string app_dir,
             std::string session_id,
             std::vector<core::AppPermissionId> granted_permissions,
             std::function<void(const std::string&)> ui_root_observer = {},
+            std::function<void(const ForegroundPagePresentation&)> foreground_page_observer = {},
+            std::function<std::optional<shell::ShellInputInvocation>()> ui_invocation_poller = {},
+            std::function<std::optional<shell::ShellNavigationAction>()> routed_action_poller = {},
             std::function<void(const std::string&, const std::string&)> app_log_observer = {});
 
     void log(const std::string& tag, const std::string& message) const;
@@ -46,6 +109,8 @@ public:
     [[nodiscard]] int capability_level(std::uint32_t capability_id) const;
     int request_text_input_focus() const;
     int release_text_input_focus() const;
+    int set_foreground_page(const aegis_ui_foreground_page_v1_t& page) const;
+    int poll_ui_event(aegis_ui_routed_event_v1_t& event) const;
     int dispatch_service(std::uint32_t domain,
                          std::uint32_t op,
                          const void* input,
@@ -83,10 +148,15 @@ private:
     device::ServiceBindingRegistry& services_;
     ServiceGatewayDispatch dispatch_;
     ResourceOwnershipTable& ownership_;
+    std::string app_dir_;
     std::string session_id_;
     std::vector<core::AppPermissionId> granted_permissions_;
     std::function<void(const std::string&)> ui_root_observer_;
+    std::function<void(const ForegroundPagePresentation&)> foreground_page_observer_;
+    std::function<std::optional<shell::ShellInputInvocation>()> ui_invocation_poller_;
+    std::function<std::optional<shell::ShellNavigationAction>()> routed_action_poller_;
     std::function<void(const std::string&, const std::string&)> app_log_observer_;
+    mutable std::optional<ForegroundPagePresentation> foreground_page_;
     mutable std::unordered_map<void*, std::string> owned_allocations_;
     aegis_host_api_v1_t abi_;
 };

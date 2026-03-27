@@ -3,8 +3,8 @@
 #include <array>
 #include <cstdint>
 #include <stdexcept>
-#include <vector>
 
+#include <esp_attr.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/fs/fs.h>
 #include <zephyr/llext/buf_loader.h>
@@ -18,6 +18,9 @@ namespace aegis::ports::zephyr {
 namespace {
 
 using AppAbiEntrypointRaw = aegis_app_run_result_v1_t (*)(const aegis_host_api_v1_t*);
+constexpr std::size_t kWritableImageBufferCapacity = 32U * 1024U;
+EXT_RAM_NOINIT_ATTR std::array<std::uint8_t, kWritableImageBufferCapacity> g_writable_image_buffer {};
+bool g_writable_image_buffer_reserved = false;
 
 bool fs_path_exists(const std::string& path, fs_dirent& entry) {
     return fs_stat(path.c_str(), &entry) == 0;
@@ -41,6 +44,33 @@ void destroy_artifacts(LlextLoadArtifacts& artifacts) {
         llext_unload(&ext);
         artifacts.ext = nullptr;
     }
+}
+
+std::uint8_t* reserve_writable_image_buffer(std::size_t size, std::string& detail) {
+    if (size == 0U) {
+        detail = "empty image";
+        return nullptr;
+    }
+    if (size > kWritableImageBufferCapacity) {
+        detail = "writable image buffer too small: need " + std::to_string(size) + " bytes, have " +
+                 std::to_string(kWritableImageBufferCapacity);
+        return nullptr;
+    }
+    if (g_writable_image_buffer_reserved) {
+        detail = "writable image buffer already reserved";
+        return nullptr;
+    }
+    g_writable_image_buffer_reserved = true;
+    detail = "psram-reserved";
+    return g_writable_image_buffer.data();
+}
+
+void release_writable_image_buffer(bool& in_use, std::size_t& size) {
+    if (in_use) {
+        g_writable_image_buffer_reserved = false;
+        in_use = false;
+    }
+    size = 0;
 }
 
 void* find_symbol_address(llext* ext, const std::string& entry_symbol) {
@@ -90,7 +120,7 @@ ZephyrLlextAdapter::~ZephyrLlextAdapter() {
         .ext = static_cast<llext*>(loaded_ext_),
     };
     destroy_artifacts(artifacts);
-    loaded_image_bytes_.clear();
+    release_writable_image_buffer(loaded_image_uses_reserved_buffer_, loaded_image_size_);
 }
 
 runtime::AdapterResult ZephyrLlextAdapter::prepare_image(const std::string& binary_path) {
@@ -114,6 +144,8 @@ runtime::AdapterResult ZephyrLlextAdapter::prepare_image(const std::string& bina
 
 runtime::AdapterResult ZephyrLlextAdapter::load_image(const std::string& binary_path,
                                                       runtime::RuntimeImageHandle& image) {
+    release_writable_image_buffer(loaded_image_uses_reserved_buffer_, loaded_image_size_);
+
     fs_file_t file;
     fs_file_t_init(&file);
     if (fs_open(&file, binary_path.c_str(), FS_O_READ) != 0) {
@@ -126,51 +158,63 @@ runtime::AdapterResult ZephyrLlextAdapter::load_image(const std::string& binary_
         return runtime::AdapterResult {.ok = false, .detail = "zephyr fs cannot stat binary"};
     }
 
-    loaded_image_bytes_.assign(static_cast<std::size_t>(entry.size), 0U);
+    std::string storage_detail;
+    auto* image_buffer =
+        reserve_writable_image_buffer(static_cast<std::size_t>(entry.size), storage_detail);
+    if (image_buffer == nullptr) {
+        fs_close(&file);
+        return runtime::AdapterResult {
+            .ok = false,
+            .detail = storage_detail,
+        };
+    }
+
     std::uint32_t crc = 2166136261u;
     std::size_t total = 0U;
-    while (total < loaded_image_bytes_.size()) {
-        const auto remaining = loaded_image_bytes_.size() - total;
-        const auto bytes =
-            fs_read(&file, loaded_image_bytes_.data() + total, remaining);
+    const auto expected_size = static_cast<std::size_t>(entry.size);
+    while (total < expected_size) {
+        const auto bytes = fs_read(&file, image_buffer + total, expected_size - total);
         if (bytes <= 0) {
             fs_close(&file);
-            loaded_image_bytes_.clear();
+            g_writable_image_buffer_reserved = false;
             return runtime::AdapterResult {.ok = false, .detail = "zephyr fs read failed"};
         }
-        crc = rolling_crc(crc,
-                          reinterpret_cast<const char*>(loaded_image_bytes_.data() + total),
-                          static_cast<std::size_t>(bytes));
+        crc = rolling_crc(
+            crc, reinterpret_cast<const char*>(image_buffer + total), static_cast<std::size_t>(bytes));
         total += static_cast<std::size_t>(bytes);
     }
     fs_close(&file);
+    loaded_image_uses_reserved_buffer_ = true;
+    loaded_image_size_ = total;
 
     image.binary_path = binary_path;
     image.image_size_bytes = total;
     image.metadata_crc32 = crc;
 
-    struct llext_buf_loader loader =
-        LLEXT_WRITABLE_BUF_LOADER(loaded_image_bytes_.data(), loaded_image_bytes_.size());
+    struct llext_buf_loader loader = LLEXT_WRITABLE_BUF_LOADER(image_buffer, loaded_image_size_);
     llext_load_param load_params = LLEXT_LOAD_PARAM_DEFAULT;
     llext* ext = nullptr;
-    if (llext_load(&loader.loader, binary_path.c_str(), &ext, &load_params) == 0 &&
-        ext != nullptr) {
+    const int load_rc = llext_load(&loader.loader, binary_path.c_str(), &ext, &load_params);
+    if (load_rc == 0 && ext != nullptr) {
         loaded_ext_ = ext;
         loaded_via_llext_ = true;
-        image.backend_name = "zephyr-llext-buffer";
+        image.backend_name = "zephyr-llext-writable-buffer";
         logger_.info("runtime",
                      "zephyr llext loaded image path=" + binary_path + " size=" +
                          std::to_string(total) + " crc=" + std::to_string(crc) +
-                         " loader=writable-buffer");
+                         " loader=writable-buffer storage=" + storage_detail);
         return runtime::AdapterResult {
             .ok = true,
-            .detail = "zephyr llext loaded native extension image from writable buffer",
+            .detail = "zephyr llext loaded native extension image from writable reserved buffer",
         };
     }
 
     loaded_ext_ = nullptr;
-    loaded_image_bytes_.clear();
     loaded_via_llext_ = false;
+    release_writable_image_buffer(loaded_image_uses_reserved_buffer_, loaded_image_size_);
+    logger_.info("runtime",
+                 "zephyr llext writable-buffer load failed path=" + binary_path +
+                     " rc=" + std::to_string(load_rc));
     if constexpr (kCompiledAppFallbackEnabled) {
         image.backend_name = "zephyr-fallback-registry";
         logger_.info("runtime",
@@ -185,7 +229,8 @@ runtime::AdapterResult ZephyrLlextAdapter::load_image(const std::string& binary_
     image.backend_name = "zephyr-llext-required";
     return runtime::AdapterResult {
         .ok = false,
-        .detail = "zephyr llext load failed and compiled fallback is disabled",
+        .detail = "zephyr llext writable-buffer load failed rc=" + std::to_string(load_rc) +
+                  " and compiled fallback is disabled",
     };
 }
 
@@ -204,27 +249,20 @@ runtime::AdapterResult ZephyrLlextAdapter::resolve_entry(runtime::RuntimeImageHa
                 .entrypoint = nullptr,
                 .abi_entrypoint = raw,
             };
-            logger_.info("runtime",
-                         "zephyr llext resolved native symbol=" + entry_symbol + " backend=" +
-                             image.backend_name + " entry=" +
-                             std::to_string(reinterpret_cast<std::uintptr_t>(symbol)));
+            logger_.info("runtime", "zephyr llext resolved native entry symbol");
             return runtime::AdapterResult {
                 .ok = true,
                 .detail = "entry resolved through zephyr llext symbol table",
             };
         }
 
-        logger_.info("runtime",
-                     "zephyr llext did not expose entry symbol=" + entry_symbol +
-                         ", falling back to compiled registry");
+        logger_.info("runtime", "zephyr llext entry symbol unavailable");
     }
 
     if constexpr (kCompiledAppFallbackEnabled) {
         try {
             contract = aegis::runtime::resolve_compiled_contract(entry_symbol);
-            logger_.info("runtime",
-                         "zephyr llext resolved entry symbol=" + entry_symbol + " backend=" +
-                             image.backend_name);
+            logger_.info("runtime", "zephyr llext resolved compiled fallback entry");
             return runtime::AdapterResult {
                 .ok = true,
                 .detail = "entry resolved through zephyr adapter contract registry",
@@ -247,7 +285,7 @@ runtime::AdapterResult ZephyrLlextAdapter::unload_image(runtime::RuntimeImageHan
         };
         destroy_artifacts(artifacts);
         loaded_ext_ = nullptr;
-        loaded_image_bytes_.clear();
+        release_writable_image_buffer(loaded_image_uses_reserved_buffer_, loaded_image_size_);
         loaded_via_llext_ = false;
     }
 

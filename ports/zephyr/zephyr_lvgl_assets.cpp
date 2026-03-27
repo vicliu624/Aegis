@@ -1,5 +1,7 @@
 #include "ports/zephyr/zephyr_lvgl_assets.hpp"
 
+#include <string_view>
+
 namespace aegis::ports::zephyr {
 
 static const uint8_t g_aegis_logo_image_data[] = {
@@ -3030,5 +3032,12 @@ const lv_image_dsc_t g_aegis_logo_image = {
     .reserved = nullptr,
     .reserved_2 = nullptr,
 };
+
+const lv_image_dsc_t* find_builtin_icon_image(std::string_view key) {
+    if (key == "builtin.settings") {
+        return &g_settings_icon_image;
+    }
+    return nullptr;
+}
 
 }  // namespace aegis::ports::zephyr
