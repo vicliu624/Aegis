@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 
 #include "platform/logging/logger.hpp"
 #include "runtime/loader/llext_adapter.hpp"
@@ -23,8 +24,8 @@ public:
 private:
     platform::Logger& logger_;
     void* loaded_ext_ {nullptr};
+    std::unique_ptr<std::uint8_t[]> loaded_image_buffer_ {};
     std::size_t loaded_image_size_ {0};
-    bool loaded_image_uses_reserved_buffer_ {false};
     bool loaded_via_llext_ {false};
 };
 
