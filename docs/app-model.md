@@ -1,5 +1,16 @@
 # Aegis App Model
 
+This document describes the current Aegis app shape and the repository's
+package-oriented app model.
+
+It does not by itself define the final isolation boundary.
+For the final runtime target, also read
+[Strongly Isolated App Runtime Blueprint](./isolated-app-runtime-blueprint.md).
+
+In the final architecture, an app is not merely a loadable native extension.
+It is a strongly isolated managed guest represented at runtime by an
+`AppInstance`.
+
 ## 1. What is an Aegis app?
 
 An Aegis app is a **native application unit** that:
@@ -65,6 +76,12 @@ The manifest is how the system recognizes an app as a valid member of the app wo
 
 It is not just metadata for display.  
 It is part of runtime admission.
+
+For Zephyr `app.llext` packages, the declared `entry symbol` must also be
+explicitly exported by the module build, not only present as a regular global
+function. In the current repository that means the app entry should use
+`LL_EXTENSION_SYMBOL(<entry>)` so the resident runtime can bind it as a
+governed native guest entrypoint.
 
 ---
 

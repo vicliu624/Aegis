@@ -4,8 +4,10 @@
 #include <stdexcept>
 
 #include "device/packages/mock_device_packages.hpp"
+#include "runtime/fault/fault.hpp"
 #include "runtime/host_api/host_api.hpp"
 #include "runtime/loader/stub_loader_backend.hpp"
+#include "runtime/supervisor/app_supervisor.hpp"
 #include "sdk/include/aegis/abi.h"
 
 namespace aegis::core {
@@ -251,6 +253,7 @@ void AegisCore::run_descriptor(const AppDescriptor& descriptor) {
     logger_.info("core", "starting app " + descriptor.manifest.app_id);
     active_sessions_.push_back(descriptor.manifest.app_id);
     AppSession session(descriptor);
+    runtime::AppSupervisor supervisor;
     session.transition_to(runtime::AppLifecycleState::LoadRequested);
     runtime::HostApi host_api(boot_artifacts_->device_profile,
                               boot_artifacts_->service_bindings,
@@ -258,6 +261,7 @@ void AegisCore::run_descriptor(const AppDescriptor& descriptor) {
                               descriptor.app_dir,
                               session.id(),
                               descriptor.manifest.requested_permissions,
+                              &session.instance().quota_ledger(),
                               [this](const std::string& root_name) {
                                   shell_.set_app_foreground_root(root_name);
                               },
@@ -321,6 +325,14 @@ void AegisCore::run_descriptor(const AppDescriptor& descriptor) {
             throw std::runtime_error("unload failed: " + unload_result.detail);
         }
     } catch (const std::exception& ex) {
+        supervisor.note_fault(session.instance(),
+                              runtime::AppFaultRecord {
+                                  .kind = runtime::AppFaultKind::UnhandledException,
+                                  .detail = ex.what(),
+                                  .lifecycle_state = session.state(),
+                                  .fatal = true,
+                                  .strike_cost = 1,
+                              });
         logger_.info("core", "app failure path: " + std::string(ex.what()));
         if (loaded && !torn_down &&
             session.state() != runtime::AppLifecycleState::TornDown &&
@@ -347,6 +359,14 @@ void AegisCore::run_descriptor(const AppDescriptor& descriptor) {
         } catch (const std::exception& recovery_ex) {
             logger_.info("core", "session recovery failed: " + std::string(recovery_ex.what()));
         }
+
+        const auto recovery_plan = supervisor.build_recovery_plan(session.instance());
+        logger_.info("core",
+                     "recovery plan terminate=" +
+                         std::string(recovery_plan.terminate_instance ? "yes" : "no") +
+                         " quarantine=" +
+                         std::string(recovery_plan.quarantine_instance ? "yes" : "no") +
+                         " actions=" + std::to_string(recovery_plan.actions.size()));
     }
 
     active_sessions_.pop_back();

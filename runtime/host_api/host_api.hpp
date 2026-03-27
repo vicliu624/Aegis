@@ -13,8 +13,11 @@
 #include "core/app_registry/app_permissions.hpp"
 #include "device/common/binding/service_binding_registry.hpp"
 #include "device/common/profile/device_profile.hpp"
+#include "runtime/handles/app_handle_table.hpp"
 #include "runtime/host_api/service_gateway_dispatch.hpp"
 #include "runtime/ownership/resource_ownership_table.hpp"
+#include "runtime/quota/quota_ledger.hpp"
+#include "runtime/syscall/syscall_gateway.hpp"
 #include "sdk/include/aegis/host_api_abi.h"
 #include "sdk/include/aegis/services/ui_service_abi.h"
 #include "shell/control/shell_input_model.hpp"
@@ -85,6 +88,7 @@ public:
             std::string app_dir,
             std::string session_id,
             std::vector<core::AppPermissionId> granted_permissions,
+            AppQuotaLedger* quota_ledger = nullptr,
             std::function<void(const std::string&)> ui_root_observer = {},
             std::function<void(const ForegroundPagePresentation&)> foreground_page_observer = {},
             std::function<std::optional<shell::ShellInputInvocation>()> ui_invocation_poller = {},
@@ -141,23 +145,29 @@ private:
     [[nodiscard]] bool has_permission(core::AppPermissionId permission) const;
     [[nodiscard]] std::optional<int> require_permission(core::AppPermissionId permission,
                                                         std::string_view operation) const;
-    [[nodiscard]] std::optional<int> require_service_permission(std::uint32_t domain,
-                                                                std::uint32_t op) const;
 
     const device::DeviceProfile& profile_;
     device::ServiceBindingRegistry& services_;
     ServiceGatewayDispatch dispatch_;
+    SyscallGateway syscall_gateway_;
     ResourceOwnershipTable& ownership_;
     std::string app_dir_;
     std::string session_id_;
     std::vector<core::AppPermissionId> granted_permissions_;
+    AppQuotaLedger* quota_ledger_ {nullptr};
     std::function<void(const std::string&)> ui_root_observer_;
     std::function<void(const ForegroundPagePresentation&)> foreground_page_observer_;
     std::function<std::optional<shell::ShellInputInvocation>()> ui_invocation_poller_;
     std::function<std::optional<shell::ShellNavigationAction>()> routed_action_poller_;
     std::function<void(const std::string&, const std::string&)> app_log_observer_;
     mutable std::optional<ForegroundPagePresentation> foreground_page_;
-    mutable std::unordered_map<void*, std::string> owned_allocations_;
+    mutable AppHandleTable handle_table_;
+    struct AllocationRecord {
+        std::string resource_name;
+        std::size_t size_bytes {0};
+        std::uint32_t handle_id {0};
+    };
+    mutable std::unordered_map<void*, AllocationRecord> owned_allocations_;
     aegis_host_api_v1_t abi_;
 };
 

@@ -1,5 +1,14 @@
 # Aegis App Lifecycle
 
+This document describes the runtime lifecycle semantics currently implemented or
+intended for the existing governed native runtime.
+
+For the final architecture, lifecycle authority must move into a dedicated app
+supervisor centered on `AppInstance`, fault containment, recovery, and
+quarantine.
+See [Strongly Isolated App Runtime Blueprint](./isolated-app-runtime-blueprint.md)
+and [Runtime Refactor Slices](./runtime-refactor-slices.md).
+
 ## 1. Purpose
 
 In Aegis, lifecycle is not an incidental detail.
@@ -40,7 +49,7 @@ Lifecycle must be a first-class runtime concept.
 
 ## 3. Lifecycle objects
 
-The lifecycle model is centered around these key objects:
+The lifecycle model is centered around these key objects in the current runtime:
 
 - `AppDescriptor`
 - `AppSession`
@@ -52,7 +61,9 @@ The lifecycle model is centered around these key objects:
 Represents a discovered and validated app package known to the system.
 
 ### 3.2 AppSession
-Represents a runtime-recognized app instance that has been granted execution rights.
+Represents the current runtime-recognized app execution object.
+In the final architecture this role should be expanded and replaced by a richer
+`AppInstance` managed by the supervisor.
 
 ### 3.3 RuntimeLoader
 Responsible for the loading, bringup, teardown, and unload of the native binary.

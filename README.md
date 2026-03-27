@@ -80,6 +80,7 @@ Read these in order:
 2. [Zephyr Onboarding](./docs/zephyr-onboarding.md)
 3. [Zephyr Build Guide](./docs/building-zephyr.md)
 4. [Architecture](./docs/architecture.md)
+5. [Strongly Isolated App Runtime Blueprint](./docs/isolated-app-runtime-blueprint.md)
 
 If your next goal is shell and interface work, continue with:
 
@@ -153,6 +154,11 @@ Apps consume capabilities, not raw ownership.
 Apps are independently built native binaries, but they are still guests inside the runtime.
 They do not define the machine.
 They run within it.
+
+The long-term target is stronger than "governed guests".
+Aegis aims to run apps as strongly isolated managed guests with explicit memory
+domains, a single syscall boundary, crash containment, and hard resource
+budgets.
 
 ### Runtime loading is a first-class concept
 

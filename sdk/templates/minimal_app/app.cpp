@@ -27,6 +27,8 @@ extern "C" aegis_app_run_result_v1_t minimal_app_main(const aegis_host_api_v1_t*
     return aegis::sdk::to_abi_result(aegis::template_app::run_minimal_app_abi(host));
 }
 
+LL_EXTENSION_SYMBOL(minimal_app_main);
+
 namespace aegis::template_app {
 
 sdk::AppRuntimeContract minimal_app_contract() {

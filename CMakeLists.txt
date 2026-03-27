@@ -33,6 +33,13 @@ list(FILTER AEGIS_SOURCES EXCLUDE REGEX ".*/generated/zephyr/.*\\.cpp$")
 
 add_executable(aegis_host_sim ${AEGIS_SOURCES})
 
+target_sources(aegis_host_sim PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/runtime/handles/app_handle_table.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/runtime/quota/quota_ledger.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/runtime/supervisor/app_instance.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/runtime/supervisor/app_supervisor.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/runtime/syscall/syscall_gateway.cpp")
+
 target_include_directories(aegis_host_sim PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/sdk/include")

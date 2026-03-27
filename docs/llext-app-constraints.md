@@ -1,5 +1,15 @@
 # Aegis LLEXT App Constraints
 
+This document describes the constraints that apply to the current Zephyr LLEXT
+app path.
+
+It should not be read as the final platform model.
+LLEXT is a substrate for current bringup, not the final security boundary.
+The final target is a strongly isolated managed native runtime that may still
+use LLEXT beneath a stricter loader and isolation backend.
+See [Strongly Isolated App Runtime Blueprint](./isolated-app-runtime-blueprint.md)
+and [Runtime Refactor Slices](./runtime-refactor-slices.md).
+
 ## 1. Purpose
 
 This document captures the implementation constraints for Aegis apps that are

@@ -1,6 +1,13 @@
 
 # Aegis Host API
 
+This document describes the current Host API boundary and its architectural
+intent.
+
+For the final runtime target, Host API should be understood as the app-facing
+surface of a stricter syscall model, not the whole enforcement mechanism.
+See [Strongly Isolated App Runtime Blueprint](./isolated-app-runtime-blueprint.md).
+
 ## 1. Purpose
 
 The Host API is the formal boundary between an Aegis app and the resident system.
@@ -12,8 +19,10 @@ It exists to answer a critical architectural requirement:
 
 The Host API is how apps gain access to the world without taking sovereignty over it.
 
-It is not just a convenience wrapper.  
-It is the principal governance boundary of Aegis.
+It is not just a convenience wrapper.
+In the current runtime it is the principal app-facing governance boundary.
+In the final runtime it must sit in front of a stricter syscall gateway,
+service broker, quota engine, and supervisor.
 
 ---
 

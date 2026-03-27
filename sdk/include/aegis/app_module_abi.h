@@ -4,6 +4,12 @@
 
 #include "sdk/include/aegis/host_api_abi.h"
 
+#if defined(LL_EXTENSION_BUILD)
+#include <zephyr/llext/symbol.h>
+#elif !defined(CONFIG_LLEXT) && !defined(LL_EXTENSION_SYMBOL)
+#define LL_EXTENSION_SYMBOL(x)
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

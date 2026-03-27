@@ -1,80 +1,41 @@
 #include "core/app_session/app_session.hpp"
 
-#include <stdexcept>
-
 namespace aegis::core {
 
-namespace {
-
-bool is_legal_transition(runtime::AppLifecycleState from, runtime::AppLifecycleState to) {
-    using State = runtime::AppLifecycleState;
-    switch (from) {
-        case State::Discovered:
-            return to == State::Validated || to == State::ReturnedToShell;
-        case State::Validated:
-            return to == State::LoadRequested || to == State::ReturnedToShell;
-        case State::LoadRequested:
-            return to == State::Loaded || to == State::ReturnedToShell;
-        case State::Loaded:
-            return to == State::Started || to == State::Stopping;
-        case State::Started:
-            return to == State::Running || to == State::Stopping;
-        case State::Running:
-            return to == State::Stopping;
-        case State::Stopping:
-            return to == State::TornDown;
-        case State::TornDown:
-            return to == State::Unloaded;
-        case State::Unloaded:
-            return to == State::ReturnedToShell;
-        case State::ReturnedToShell:
-            return false;
-    }
-
-    return false;
-}
-
-}  // namespace
-
 AppSession::AppSession(const AppDescriptor& descriptor)
-    : id_(descriptor.manifest.app_id + ":session"),
-      descriptor_(descriptor),
-      state_(descriptor.validated ? runtime::AppLifecycleState::Validated
-                                  : runtime::AppLifecycleState::Discovered),
-      history_ {state_} {}
+    : instance_(descriptor) {}
 
 const std::string& AppSession::id() const {
-    return id_;
+    return instance_.instance_id();
 }
 
 const AppDescriptor& AppSession::descriptor() const {
-    return descriptor_;
+    return instance_.descriptor();
 }
 
 runtime::AppLifecycleState AppSession::state() const {
-    return state_;
+    return instance_.state();
 }
 
 const std::vector<runtime::AppLifecycleState>& AppSession::history() const {
-    return history_;
+    return instance_.history();
+}
+
+runtime::AppInstance& AppSession::instance() {
+    return instance_;
+}
+
+const runtime::AppInstance& AppSession::instance() const {
+    return instance_;
 }
 
 void AppSession::transition_to(runtime::AppLifecycleState state) {
-    if (state == state_) {
-        return;
-    }
-    if (!is_legal_transition(state_, state)) {
-        throw std::runtime_error("illegal lifecycle transition from " +
-                                 std::string(runtime::to_string(state_)) + " to " +
-                                 std::string(runtime::to_string(state)));
-    }
-    state_ = state;
-    history_.push_back(state_);
+    instance_.transition_to(state);
 }
 
 void AppSession::recover_to_shell() {
     using State = runtime::AppLifecycleState;
-    switch (state_) {
+    switch (state()) {
         case State::Discovered:
         case State::Validated:
         case State::LoadRequested:

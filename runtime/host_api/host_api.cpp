@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <utility>
 
 #include "sdk/include/aegis/services/audio_service_abi.h"
 #include "sdk/include/aegis/services/gps_service_abi.h"
@@ -107,6 +108,7 @@ HostApi::HostApi(const device::DeviceProfile& profile,
                  std::string app_dir,
                  std::string session_id,
                  std::vector<core::AppPermissionId> granted_permissions,
+                 AppQuotaLedger* quota_ledger,
                  std::function<void(const std::string&)> ui_root_observer,
                  std::function<void(const ForegroundPagePresentation&)> foreground_page_observer,
                  std::function<std::optional<shell::ShellInputInvocation>()> ui_invocation_poller,
@@ -115,10 +117,19 @@ HostApi::HostApi(const device::DeviceProfile& profile,
     : profile_(profile),
       services_(services),
       dispatch_(services_),
+      syscall_gateway_(dispatch_,
+                       quota_ledger,
+                       [this](core::AppPermissionId permission, std::string_view operation) {
+                           return require_permission(permission, operation);
+                       },
+                       [this](const std::string& tag, const std::string& message) {
+                           log(tag, message);
+                       }),
       ownership_(ownership),
       app_dir_(std::move(app_dir)),
       session_id_(std::move(session_id)),
       granted_permissions_(std::move(granted_permissions)),
+      quota_ledger_(quota_ledger),
       ui_root_observer_(std::move(ui_root_observer)),
       foreground_page_observer_(std::move(foreground_page_observer)),
       ui_invocation_poller_(std::move(ui_invocation_poller)),
@@ -137,6 +148,13 @@ HostApi::HostApi(const device::DeviceProfile& profile,
             .service_call = &HostApi::abi_service_call} {}
 
 void HostApi::log(const std::string& tag, const std::string& message) const {
+    if (quota_ledger_ != nullptr) {
+        if (quota_ledger_->would_exceed(QuotaResource::LogBytesPerMinute, message.size())) {
+            services_.logging()->log("runtime", "drop app log because log quota would be exceeded");
+            return;
+        }
+        quota_ledger_->force_consume(QuotaResource::LogBytesPerMinute, message.size());
+    }
     services_.logging()->log(tag, message);
     if (app_log_observer_) {
         app_log_observer_(tag, message);
@@ -165,11 +183,23 @@ std::string HostApi::describe_gps() const {
 
 void* HostApi::allocate(std::size_t size, std::size_t alignment) const {
     (void)alignment;
+    if (quota_ledger_ != nullptr &&
+        !quota_ledger_->try_consume(QuotaResource::HeapBytes, size)) {
+        log("runtime", "deny allocation because heap quota would be exceeded");
+        return nullptr;
+    }
     void* memory = std::malloc(size);
     if (memory != nullptr) {
         const auto resource = "mem:" + std::to_string(reinterpret_cast<std::uintptr_t>(memory));
         ownership_.track(session_id_, resource);
-        owned_allocations_[memory] = resource;
+        const auto handle_id = handle_table_.register_handle(AppHandleKind::Allocation, resource);
+        owned_allocations_[memory] = AllocationRecord {
+            .resource_name = resource,
+            .size_bytes = size,
+            .handle_id = handle_id,
+        };
+    } else if (quota_ledger_ != nullptr) {
+        quota_ledger_->release(QuotaResource::HeapBytes, size);
     }
     return memory;
 }
@@ -182,8 +212,13 @@ bool HostApi::free(void* ptr) const {
     if (it == owned_allocations_.end()) {
         return false;
     }
-    const auto _ = ownership_.untrack(session_id_, it->second);
+    const auto _ = ownership_.untrack(session_id_, it->second.resource_name);
     (void)_;
+    if (quota_ledger_ != nullptr) {
+        quota_ledger_->release(QuotaResource::HeapBytes, it->second.size_bytes);
+    }
+    const auto released = handle_table_.release(it->second.handle_id);
+    (void)released;
     std::free(ptr);
     owned_allocations_.erase(it);
     return true;
@@ -194,7 +229,10 @@ void HostApi::create_ui_root(const std::string& name) const {
         status.has_value()) {
         return;
     }
-    ownership_.track(session_id_, "ui_root:" + name);
+    const auto label = "ui_root:" + name;
+    ownership_.track(session_id_, label);
+    const auto handle_id = handle_table_.register_handle(AppHandleKind::UiRoot, label);
+    (void)handle_id;
     if (ui_root_observer_) {
         ui_root_observer_(name);
     }
@@ -206,7 +244,10 @@ bool HostApi::destroy_ui_root(const std::string& name) const {
         status.has_value()) {
         return false;
     }
-    return ownership_.untrack(session_id_, "ui_root:" + name);
+    const auto label = "ui_root:" + name;
+    const auto untracked = ownership_.untrack(session_id_, label);
+    const auto released = handle_table_.release_by_label(AppHandleKind::UiRoot, label);
+    return untracked || released;
 }
 
 int HostApi::create_timer(std::uint32_t timeout_ms, bool repeat) const {
@@ -218,7 +259,20 @@ int HostApi::create_timer(std::uint32_t timeout_ms, bool repeat) const {
 
     const int timer_id = services_.timer()->create(timeout_ms, repeat);
     if (timer_id > 0) {
-        ownership_.track(session_id_, "timer:" + std::to_string(timer_id));
+        if (quota_ledger_ != nullptr &&
+            !quota_ledger_->try_consume(QuotaResource::TimerCount, 1)) {
+            const auto _ = services_.timer()->cancel(timer_id);
+            (void)_;
+            log("runtime", "deny timer because timer quota would be exceeded");
+            return AEGIS_HOST_STATUS_UNSUPPORTED;
+        }
+        const auto label = "timer:" + std::to_string(timer_id);
+        ownership_.track(session_id_, label, [timer = services_.timer(), timer_id]() {
+            const auto _ = timer->cancel(timer_id);
+            (void)_;
+        });
+        const auto handle_id = handle_table_.register_handle(AppHandleKind::Timer, label);
+        (void)handle_id;
     }
     return timer_id;
 }
@@ -232,8 +286,14 @@ bool HostApi::cancel_timer(int timer_id) const {
 
     const bool canceled = services_.timer()->cancel(timer_id);
     if (canceled) {
-        const auto _ = ownership_.untrack(session_id_, "timer:" + std::to_string(timer_id));
+        const auto label = "timer:" + std::to_string(timer_id);
+        const auto _ = ownership_.untrack(session_id_, label);
         (void)_;
+        const auto released = handle_table_.release_by_label(AppHandleKind::Timer, label);
+        (void)released;
+        if (quota_ledger_ != nullptr) {
+            quota_ledger_->release(QuotaResource::TimerCount, 1);
+        }
     }
     return canceled;
 }
@@ -257,7 +317,10 @@ void HostApi::notify(const std::string& title, const std::string& body) const {
         status.has_value()) {
         return;
     }
-    ownership_.track(session_id_, "notification:" + title);
+    const auto label = "notification:" + title;
+    ownership_.track(session_id_, label);
+    const auto handle_id = handle_table_.register_handle(AppHandleKind::Notification, label);
+    (void)handle_id;
     services_.notifications()->notify(title, body);
 }
 
@@ -287,6 +350,9 @@ int HostApi::request_text_input_focus() const {
                          const auto _ = service->release_focus_for_session(session_id);
                          (void)_;
                      });
+    const auto handle_id =
+        handle_table_.register_handle(AppHandleKind::TextInputFocus, "text_input_focus");
+    (void)handle_id;
     return AEGIS_HOST_STATUS_OK;
 }
 
@@ -308,6 +374,9 @@ int HostApi::release_text_input_focus() const {
 
     const auto _ = ownership_.untrack(session_id_, "text_input_focus");
     (void)_;
+    const auto released =
+        handle_table_.release_by_label(AppHandleKind::TextInputFocus, "text_input_focus");
+    (void)released;
     return AEGIS_HOST_STATUS_OK;
 }
 
@@ -382,6 +451,12 @@ int HostApi::set_foreground_page(const aegis_ui_foreground_page_v1_t& page) cons
     (void)_;
     foreground_page_ = presentation;
     ownership_.track(session_id_, "foreground_page");
+    const auto released =
+        handle_table_.release_by_label(AppHandleKind::ForegroundPage, "foreground_page");
+    (void)released;
+    const auto handle_id =
+        handle_table_.register_handle(AppHandleKind::ForegroundPage, "foreground_page");
+    (void)handle_id;
     if (foreground_page_observer_) {
         foreground_page_observer_(presentation);
     }
@@ -461,10 +536,6 @@ int HostApi::dispatch_service(std::uint32_t domain,
                               std::size_t input_size,
                               void* output,
                               std::size_t* output_size) const {
-    if (const auto status = require_service_permission(domain, op); status.has_value()) {
-        return *status;
-    }
-
     if (domain == AEGIS_SERVICE_DOMAIN_TEXT_INPUT) {
         if (op == AEGIS_TEXT_INPUT_SERVICE_OP_REQUEST_FOCUS) {
             return request_text_input_focus();
@@ -497,7 +568,7 @@ int HostApi::dispatch_service(std::uint32_t domain,
         }
     }
 
-    return dispatch_.call(domain, op, input, input_size, output, output_size);
+    return syscall_gateway_.dispatch_service(domain, op, input, input_size, output, output_size);
 }
 
 const aegis_host_api_v1_t* HostApi::abi() const {
@@ -520,44 +591,6 @@ std::optional<int> HostApi::require_permission(core::AppPermissionId permission,
             "' because manifest did not request permission " +
             std::string(core::to_string(permission)));
     return AEGIS_HOST_STATUS_UNSUPPORTED;
-}
-
-std::optional<int> HostApi::require_service_permission(std::uint32_t domain, std::uint32_t op) const {
-    switch (domain) {
-        case AEGIS_SERVICE_DOMAIN_RADIO:
-            return require_permission(core::AppPermissionId::RadioUse, "access radio service");
-        case AEGIS_SERVICE_DOMAIN_GPS:
-            return require_permission(core::AppPermissionId::GpsUse, "access gps service");
-        case AEGIS_SERVICE_DOMAIN_AUDIO:
-            return require_permission(core::AppPermissionId::AudioUse, "access audio service");
-        case AEGIS_SERVICE_DOMAIN_HOSTLINK:
-            return require_permission(core::AppPermissionId::HostlinkUse,
-                                      "access hostlink service");
-        case AEGIS_SERVICE_DOMAIN_STORAGE:
-            return require_permission(core::AppPermissionId::StorageAccess,
-                                      "access storage service");
-        case AEGIS_SERVICE_DOMAIN_NOTIFICATION:
-            if (op == AEGIS_NOTIFICATION_SERVICE_OP_PUBLISH) {
-                return require_permission(core::AppPermissionId::NotificationPost,
-                                          "access notification service");
-            }
-            return std::nullopt;
-        case AEGIS_SERVICE_DOMAIN_SETTINGS:
-            if (op == AEGIS_SETTINGS_SERVICE_OP_SET) {
-                return require_permission(core::AppPermissionId::SettingsWrite,
-                                          "write settings service");
-            }
-            return std::nullopt;
-        case AEGIS_SERVICE_DOMAIN_TEXT_INPUT:
-            if (op == AEGIS_TEXT_INPUT_SERVICE_OP_REQUEST_FOCUS ||
-                op == AEGIS_TEXT_INPUT_SERVICE_OP_RELEASE_FOCUS) {
-                return require_permission(core::AppPermissionId::TextInputFocus,
-                                          "control text input focus");
-            }
-            return std::nullopt;
-        default:
-            return std::nullopt;
-    }
 }
 
 int HostApi::abi_log_write(void* user_data, const char* tag, const char* message) {

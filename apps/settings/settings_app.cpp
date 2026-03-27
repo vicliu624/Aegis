@@ -646,3 +646,5 @@ extern "C" aegis_app_run_result_v1_t settings_main(const aegis_host_api_v1_t* ho
     }
     return AEGIS_APP_RUN_RESULT_COMPLETED;
 }
+
+LL_EXTENSION_SYMBOL(settings_main);

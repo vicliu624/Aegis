@@ -1,5 +1,13 @@
 # Aegis App Runtime Memory Model
 
+This document describes the current runtime memory ownership model and the rules
+needed to stay safe in the present native-runtime implementation.
+
+It should not be mistaken for the final isolation model.
+The final target is stronger: per-app memory domains, fault-attributable
+regions, bounded shared buffers, and runtime-enforced access boundaries.
+See [Strongly Isolated App Runtime Blueprint](./isolated-app-runtime-blueprint.md).
+
 ## 1. Purpose
 
 This document defines the runtime memory model for Aegis native apps.

@@ -1,5 +1,13 @@
 # Aegis Service Gateway
 
+This document describes the current service gateway role.
+
+In the final runtime target, service gateway semantics must be tightened into a
+service broker layer behind a syscall gateway, with explicit handle ownership,
+revoke semantics, quotas, and auditability.
+See [Strongly Isolated App Runtime Blueprint](./isolated-app-runtime-blueprint.md)
+and [Runtime Refactor Slices](./runtime-refactor-slices.md).
+
 ## 1. Purpose
 
 The Service Gateway is the system-owned boundary through which Aegis exposes capabilities to apps and higher-level runtime components.

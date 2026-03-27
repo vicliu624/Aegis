@@ -13,6 +13,13 @@ It is a governed runtime where:
 - apps are native loadable guests,
 - and lifecycle is explicitly controlled by the runtime.
 
+The current runtime should be understood as a governed native app runtime.
+The final target for Aegis is stricter: a strongly isolated managed native
+runtime where app memory, service access, UI ownership, crash behavior, and
+resource budgets are all runtime-enforced rather than convention-enforced.
+
+For that final model, see [Strongly Isolated App Runtime Blueprint](./isolated-app-runtime-blueprint.md).
+
 Aegis uses **Zephyr** as the lower OS and hardware governance layer, and builds a native app platform on top of it.
 
 ---

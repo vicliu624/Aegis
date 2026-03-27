@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 
 #include <esp_attr.h>
@@ -73,23 +74,162 @@ void release_writable_image_buffer(bool& in_use, std::size_t& size) {
     size = 0;
 }
 
-void* find_symbol_address(llext* ext, const std::string& entry_symbol) {
-    if (ext == nullptr) {
+template <typename T>
+const T* view_at(const std::uint8_t* image, std::size_t image_size, std::size_t offset) {
+    if (image == nullptr || offset > image_size || image_size - offset < sizeof(T)) {
+        return nullptr;
+    }
+    return reinterpret_cast<const T*>(image + offset);
+}
+
+const char* view_c_string(const std::uint8_t* image, std::size_t image_size, std::size_t offset) {
+    if (image == nullptr || offset >= image_size) {
+        return nullptr;
+    }
+    return reinterpret_cast<const char*>(image + offset);
+}
+
+bool map_section_to_runtime_region(const elf_shdr_t& section, llext_mem& region) {
+    if ((section.sh_flags & SHF_ALLOC) == 0U) {
+        return false;
+    }
+
+    if ((section.sh_flags & SHF_EXECINSTR) != 0U) {
+        region = LLEXT_MEM_TEXT;
+        return true;
+    }
+    if ((section.sh_flags & SHF_WRITE) != 0U) {
+        region = section.sh_type == SHT_NOBITS ? LLEXT_MEM_BSS : LLEXT_MEM_DATA;
+        return true;
+    }
+
+    region = LLEXT_MEM_RODATA;
+    return true;
+}
+
+std::size_t align_up(std::size_t value, std::size_t alignment) {
+    if (alignment <= 1U) {
+        return value;
+    }
+    const auto remainder = value % alignment;
+    return remainder == 0U ? value : value + (alignment - remainder);
+}
+
+std::size_t runtime_offset_for_section(const elf_shdr_t* section_headers,
+                                       elf_half section_count,
+                                       elf_half target_index) {
+    if (section_headers == nullptr || target_index >= section_count) {
+        return 0U;
+    }
+
+    llext_mem target_region {};
+    if (!map_section_to_runtime_region(section_headers[target_index], target_region)) {
+        return 0U;
+    }
+
+    std::size_t offset = 0U;
+    for (elf_half index = 0; index < target_index; ++index) {
+        llext_mem region {};
+        const auto& section = section_headers[index];
+        if (!map_section_to_runtime_region(section, region) || region != target_region) {
+            continue;
+        }
+
+        offset = align_up(offset, section.sh_addralign);
+        offset += section.sh_size;
+    }
+
+    offset = align_up(offset, section_headers[target_index].sh_addralign);
+    return offset;
+}
+
+void* runtime_base_for_section(llext* ext, llext_mem region) {
+    return ext != nullptr ? ext->mem[region] : nullptr;
+}
+
+void* resolve_symbol_from_raw_elf(llext* ext,
+                                  const std::string& entry_symbol,
+                                  std::size_t image_size) {
+    const auto* image = g_writable_image_buffer.data();
+    const auto* elf_header = view_at<elf_ehdr_t>(image, image_size, 0U);
+    if (ext == nullptr || elf_header == nullptr || elf_header->e_shentsize != sizeof(elf_shdr_t) ||
+        elf_header->e_shnum == 0U) {
         return nullptr;
     }
 
-    if (ext->sym_tab.syms != nullptr && ext->sym_tab.sym_cnt > 0U) {
-        for (std::size_t index = 0; index < ext->sym_tab.sym_cnt; ++index) {
-            const auto& sym = ext->sym_tab.syms[index];
-            if (sym.name != nullptr && entry_symbol == sym.name) {
-                return sym.addr;
-            }
-        }
+    if (std::memcmp(elf_header->e_ident, "\x7f"
+                                     "ELF",
+                    4) != 0) {
+        return nullptr;
     }
 
-    if (const void* exported = llext_find_sym(&ext->exp_tab, entry_symbol.c_str());
-        exported != nullptr) {
-        return const_cast<void*>(exported);
+    const auto section_headers_size =
+        static_cast<std::size_t>(elf_header->e_shnum) * sizeof(elf_shdr_t);
+    if (elf_header->e_shoff > image_size || image_size - elf_header->e_shoff < section_headers_size) {
+        return nullptr;
+    }
+
+    const auto* section_headers =
+        reinterpret_cast<const elf_shdr_t*>(image + static_cast<std::size_t>(elf_header->e_shoff));
+
+    for (elf_half section_index = 0; section_index < elf_header->e_shnum; ++section_index) {
+        const auto& symbol_section = section_headers[section_index];
+        if (symbol_section.sh_type != SHT_SYMTAB || symbol_section.sh_entsize != sizeof(elf_sym_t) ||
+            symbol_section.sh_size == 0U) {
+            continue;
+        }
+        if (symbol_section.sh_offset > image_size ||
+            image_size - symbol_section.sh_offset < symbol_section.sh_size) {
+            continue;
+        }
+        if (symbol_section.sh_link >= elf_header->e_shnum) {
+            continue;
+        }
+
+        const auto& string_section = section_headers[symbol_section.sh_link];
+        if (string_section.sh_type != SHT_STRTAB || string_section.sh_size == 0U ||
+            string_section.sh_offset > image_size ||
+            image_size - string_section.sh_offset < string_section.sh_size) {
+            continue;
+        }
+
+        const auto symbol_count = symbol_section.sh_size / sizeof(elf_sym_t);
+        const auto* symbols = reinterpret_cast<const elf_sym_t*>(
+            image + static_cast<std::size_t>(symbol_section.sh_offset));
+
+        for (std::size_t symbol_index = 0; symbol_index < symbol_count; ++symbol_index) {
+            const auto& symbol = symbols[symbol_index];
+            if (symbol.st_name >= string_section.sh_size || symbol.st_shndx == SHN_UNDEF ||
+                symbol.st_shndx >= elf_header->e_shnum || ELF_ST_TYPE(symbol.st_info) != STT_FUNC) {
+                continue;
+            }
+
+            const auto* symbol_name = view_c_string(image,
+                                                    image_size,
+                                                    static_cast<std::size_t>(string_section.sh_offset) +
+                                                        symbol.st_name);
+            if (symbol_name == nullptr || entry_symbol != symbol_name) {
+                continue;
+            }
+
+            llext_mem region {};
+            if (!map_section_to_runtime_region(section_headers[symbol.st_shndx], region)) {
+                return nullptr;
+            }
+
+            void* const section_base = runtime_base_for_section(ext, region);
+            if (section_base == nullptr) {
+                return nullptr;
+            }
+
+            const auto merged_offset = runtime_offset_for_section(
+                section_headers, elf_header->e_shnum, symbol.st_shndx);
+            const auto section_relative_value =
+                symbol.st_value - section_headers[symbol.st_shndx].sh_addr;
+            const auto address = reinterpret_cast<std::uintptr_t>(section_base) + merged_offset +
+                                 section_relative_value;
+            return reinterpret_cast<void*>(address);
+        }
     }
 
     return nullptr;
@@ -241,7 +381,8 @@ runtime::AdapterResult ZephyrLlextAdapter::resolve_entry(runtime::RuntimeImageHa
 
     if (loaded_via_llext_ && loaded_ext_ != nullptr) {
         auto* ext = static_cast<llext*>(loaded_ext_);
-        if (void* symbol = find_symbol_address(ext, entry_symbol); symbol != nullptr) {
+        if (void* symbol = resolve_symbol_from_raw_elf(ext, entry_symbol, loaded_image_size_);
+            symbol != nullptr) {
             symbol = normalize_entry_symbol_address(symbol);
             const auto raw = reinterpret_cast<AppAbiEntrypointRaw>(symbol);
             contract = aegis::sdk::AppRuntimeContract {
@@ -249,10 +390,10 @@ runtime::AdapterResult ZephyrLlextAdapter::resolve_entry(runtime::RuntimeImageHa
                 .entrypoint = nullptr,
                 .abi_entrypoint = raw,
             };
-            logger_.info("runtime", "zephyr llext resolved native entry symbol");
+            logger_.info("runtime", "zephyr llext resolved native entry symbol via raw elf");
             return runtime::AdapterResult {
                 .ok = true,
-                .detail = "entry resolved through zephyr llext symbol table",
+                .detail = "entry resolved through raw llext elf symbol table",
             };
         }
 

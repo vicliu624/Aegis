@@ -1,5 +1,13 @@
 # Aegis App Manifest Specification
 
+This document describes the package manifest contract.
+
+In the final runtime target, manifest fields remain necessary but are not by
+themselves enforcement.
+Permissions, capabilities, and budgets become real only after admission binds
+them into runtime policy and quota ledgers.
+See [Strongly Isolated App Runtime Blueprint](./isolated-app-runtime-blueprint.md).
+
 ## 1. Purpose
 
 In Aegis, an app is not recognized merely because a binary exists in the filesystem.

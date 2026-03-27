@@ -1,5 +1,13 @@
 # Aegis Runtime Loader
 
+This document describes the current runtime loader role.
+
+For the final runtime target, loader responsibilities must be split more
+strictly across admission, binary policy, memory mapping, supervisor bringup,
+fault handling, and recovery.
+See [Strongly Isolated App Runtime Blueprint](./isolated-app-runtime-blueprint.md)
+and [Runtime Refactor Slices](./runtime-refactor-slices.md).
+
 ## 1. Purpose
 
 The runtime loader is the subsystem that turns a discovered native app package into a loadable and governable runtime participant.
@@ -35,8 +43,10 @@ Its job is to bridge:
 - lifecycle bringup/teardown
 - unload discipline
 
-It is not the whole runtime.  
-It is the loading and unloading authority within the runtime.
+It is not the whole runtime.
+It is also not the final authority for lifecycle, isolation, quota, or recovery.
+Those responsibilities belong to separate runtime subsystems in the target
+architecture.
 
 ---
 
@@ -69,6 +79,16 @@ This distinction is critical.
 
 LLEXT is the loading engine.  
 Aegis runtime loader is the governed app admission layer built on top of it.
+
+On current Zephyr Xtensa targets, Aegis should not trust raw post-load LLEXT
+name tables as the durable app-entry discovery interface. The stable contract is:
+
+- the app manifest declares the expected entry symbol
+- the app module explicitly exports that entry with `LL_EXTENSION_SYMBOL(...)`
+- the Aegis Zephyr adapter resolves the symbol from the module ELF and maps it
+  into the loaded runtime text region under Aegis control
+
+That resolution policy is part of the loader adapter contract, not app logic.
 
 ---
 

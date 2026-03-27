@@ -162,6 +162,11 @@ target_sources(app PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../../device/packages/mock_device_packages.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../runtime/host_api/host_api.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../runtime/host_api/service_gateway_dispatch.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../runtime/handles/app_handle_table.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../runtime/quota/quota_ledger.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../runtime/supervisor/app_instance.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../runtime/supervisor/app_supervisor.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../runtime/syscall/syscall_gateway.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../runtime/loader/compiled_app_contract_registry.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../runtime/loader/llext_loader_backend.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../../runtime/loader/runtime_loader.cpp

@@ -17,6 +17,37 @@ enum class AppLifecycleState {
     ReturnedToShell,
 };
 
+[[nodiscard]] constexpr bool is_terminal_state(AppLifecycleState state) {
+    return state == AppLifecycleState::ReturnedToShell;
+}
+
+[[nodiscard]] constexpr bool is_legal_transition(AppLifecycleState from, AppLifecycleState to) {
+    switch (from) {
+        case AppLifecycleState::Discovered:
+            return to == AppLifecycleState::Validated || to == AppLifecycleState::ReturnedToShell;
+        case AppLifecycleState::Validated:
+            return to == AppLifecycleState::LoadRequested || to == AppLifecycleState::ReturnedToShell;
+        case AppLifecycleState::LoadRequested:
+            return to == AppLifecycleState::Loaded || to == AppLifecycleState::ReturnedToShell;
+        case AppLifecycleState::Loaded:
+            return to == AppLifecycleState::Started || to == AppLifecycleState::Stopping;
+        case AppLifecycleState::Started:
+            return to == AppLifecycleState::Running || to == AppLifecycleState::Stopping;
+        case AppLifecycleState::Running:
+            return to == AppLifecycleState::Stopping;
+        case AppLifecycleState::Stopping:
+            return to == AppLifecycleState::TornDown;
+        case AppLifecycleState::TornDown:
+            return to == AppLifecycleState::Unloaded;
+        case AppLifecycleState::Unloaded:
+            return to == AppLifecycleState::ReturnedToShell;
+        case AppLifecycleState::ReturnedToShell:
+            return false;
+    }
+
+    return false;
+}
+
 [[nodiscard]] constexpr std::string_view to_string(AppLifecycleState state) {
     switch (state) {
         case AppLifecycleState::Discovered:
