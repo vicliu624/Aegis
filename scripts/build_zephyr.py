@@ -14,11 +14,11 @@ from typing import Sequence
 
 
 DEFAULT_BOARD = "esp32s3_devkitc/esp32s3/procpu"
-DEFAULT_OVERLAY = "boards/lilygo_tlora_pager_sx1262.overlay"
+DEFAULT_OVERLAY = "boards/lilygo_tdeck.overlay"
 DEFAULT_BUILD_DIR = "build-zephyr"
 DEFAULT_FLASH_BAUD = "921600"
 DEFAULT_FLASH_CHIP = "esp32s3"
-DEFAULT_BOOTSTRAP_PACKAGE = "zephyr_tlora_pager_sx1262"
+DEFAULT_BOOTSTRAP_PACKAGE = "zephyr_tdeck_sx1262"
 
 OVERLAY_PACKAGE_DEFAULTS = {
     "boards/lilygo_tlora_pager_sx1262.overlay": "zephyr_tlora_pager_sx1262",

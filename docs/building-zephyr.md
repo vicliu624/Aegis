@@ -16,9 +16,9 @@ It covers:
 - what each generated artifact means
 - how firmware flashing and appfs flashing differ
 
-The current target described here is the LilyGo T-LoRa Pager bring-up path built on Zephyr's
+The current target described here is the LilyGo T-Deck bring-up path built on Zephyr's
 `esp32s3_devkitc/esp32s3/procpu` board target plus the repository overlay
-`boards/lilygo_tlora_pager_sx1262.overlay`.
+`boards/lilygo_tdeck.overlay`.
 
 ---
 
@@ -283,9 +283,9 @@ This is the Zephyr base board target, not the Aegis board identity itself.
 
 ### `--overlay`
 
-Defaults to `boards/lilygo_tlora_pager_sx1262.overlay`.
+Defaults to `boards/lilygo_tdeck.overlay`.
 
-This overlay is what maps the generic Zephyr board target onto the concrete T-LoRa Pager wiring used
+This overlay is what maps the generic Zephyr board target onto the concrete T-Deck wiring used
 by the current Aegis bring-up.
 
 ### `--compiled-fallback`

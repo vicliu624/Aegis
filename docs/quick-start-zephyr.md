@@ -60,10 +60,10 @@ If that succeeds, the current end-to-end host build and flash path is working.
 
 ## 3. Current Default Target
 
-The repository quick-start path assumes the current Pager bring-up target:
+The repository quick-start path assumes the current T-Deck bring-up target:
 
 - Zephyr board: `esp32s3_devkitc/esp32s3/procpu`
-- overlay: `boards/lilygo_tlora_pager_sx1262.overlay`
+- overlay: `boards/lilygo_tdeck.overlay`
 
 You do not need to pass these values in the normal quick-start flow because
 `scripts/build_zephyr.py` already defaults to them.

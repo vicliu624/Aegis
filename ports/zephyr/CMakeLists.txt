@@ -102,7 +102,7 @@ set(AEGIS_ZEPHYR_FLASH_BAUD "921600" CACHE STRING
     "Baud rate used by the appfs flash helper")
 set(AEGIS_ZEPHYR_FLASH_PORT "" CACHE STRING
     "Serial port used by the appfs flash helper")
-set(AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE "zephyr_tlora_pager_sx1262" CACHE STRING
+set(AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE "zephyr_tdeck_sx1262" CACHE STRING
     "Board package id bootstrapped by the resident Aegis Zephyr target")
 
 target_include_directories(app PRIVATE

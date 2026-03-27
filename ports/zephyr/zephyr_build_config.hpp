@@ -17,7 +17,7 @@
 #endif
 
 #ifndef AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE
-#define AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE "zephyr_tlora_pager_sx1262"
+#define AEGIS_ZEPHYR_BOOTSTRAP_DEVICE_PACKAGE "zephyr_tdeck_sx1262"
 #endif
 
 namespace aegis::ports::zephyr {

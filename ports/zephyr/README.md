@@ -10,15 +10,15 @@ Current status:
 - Zephyr-backed service adapters now exist for settings, timer, notification, storage, power, time, radio, GPS, audio, and hostlink.
 - A typed text-input service contract now exists above the Zephyr keyboard path, so apps can query interpreted text-entry state without seeing board-specific keypad details.
 - Zephyr UI binding is no longer forced through `Mock*Service` names in the board package path; display/input status is now carried by typed UI service data.
-- The Zephyr target now includes a concrete `zephyr_tlora_pager_sx1262` board package/profile derived from the LilyGo T-LoRa-Pager hardware map.
-- T-LoRa-Pager board adaptation now declares a real ST7796S display node on a Zephyr MIPI-DBI SPI controller, a real `gpio-qdec` rotary input node, a real `gpio-keys` center button, and a real TCA8418 keypad input driver path reported through the Zephyr input subsystem.
-- Shell presentation and control are now hooked to Zephyr-backed adapters: shell surface changes drive a real display adapter, rotary input events come from Zephyr input devices, and TCA8418 keypad events now flow through a board-backed Zephyr input driver plus `input-keymap`.
-- The Zephyr target now binds keyboard hardware twice in the right layers: raw matrix/key reporting through the Zephyr input subsystem, and interpreted modifier/text state through the Aegis text-input service contract.
+- The Zephyr target now includes a concrete `zephyr_tdeck_sx1262` board package/profile derived from the LilyGo T-Deck hardware map.
+- T-Deck board adaptation now declares a real ST7789 display node on a Zephyr MIPI-DBI SPI controller, a real GPIO trackball input path, and a GT911 touch path for the current board bring-up.
+- Shell presentation and control are now hooked to Zephyr-backed adapters: shell surface changes drive a real display adapter, and T-Deck navigation events flow through board-backed input adapters.
+- The Zephyr target now binds keyboard hardware twice in the right layers where applicable: raw board event reporting through the input path, and interpreted modifier/text state through the Aegis text-input service contract.
 - Compiled app fallback is now an explicit bootstrap option, and app-side ABI entry sources are split from compiled fallback contracts so `.llext`-oriented module builds can advance independently.
 - Zephyr-native `add_llext_target(...)` packaging is now used for app modules, and staged `.llext` app packages are emitted under `build-zephyr/aegis/apps/<app-id>/`.
 - A formal deploy-tree target now exists: `aegis_zephyr_deploy_app_tree` assembles those staged packages under `build-zephyr/deploy/lfs/apps/` so the runtime-facing appfs layout is explicit and no longer implicit build-directory knowledge.
 - A formal `aegis_zephyr_appfs_image` target now exists. It derives the `storage_partition` size and offset from `zephyr.dts`, writes an `appfs-layout.json`, prefers `mklittlefs` when available, and now has a cross-platform `littlefs-python` fallback path that can be cached automatically when the native tool is absent.
-- The T-LoRa-Pager overlay now reclaims the real 8MB flash space instead of stopping at the inherited 4MB partition profile, so `storage_partition` can hold a real multi-app `appfs.bin`.
+- The T-Deck overlay now exposes the board resources needed for a real multi-app `appfs.bin` bring-up path.
 - A formal `aegis_zephyr_flash_appfs` target now exists. It writes the generated `appfs.bin` directly to the resolved `storage_partition` offset through `esptool`, with the serial port supplied through `AEGIS_ZEPHYR_FLASH_PORT`.
 - The Zephyr entrypoint now verifies the local Xtensa `R_XTENSA_RTLD` LLEXT no-op patch against the active `ZEPHYR_BASE` during configure, and by default auto-applies it so Pager bring-up does not silently depend on an untracked manual edit under `C:\\ProgramData\\zephyrproject\\zephyr`.
 - That helper is intentionally version-gated to the Zephyr source layout validated during bring-up, so an upstream Zephyr upgrade fails loudly until the patch path is re-checked instead of silently mutating an unknown loader implementation.
@@ -34,12 +34,12 @@ Suggested build flow for the current bringup path:
 
 ```text
 west build -b esp32s3_devkitc/esp32s3/procpu ports/zephyr ^
-  -- -DDTC_OVERLAY_FILE=boards/lilygo_tlora_pager_sx1262.overlay ^
+  -- -DDTC_OVERLAY_FILE=boards/lilygo_tdeck.overlay ^
      -DAEGIS_ZEPHYR_ENABLE_COMPILED_APP_FALLBACK=OFF ^
      -DAEGIS_ZEPHYR_ENABLE_APP_MODULES=ON
 ```
 
-This uses the ESP32-S3 devkit SoC target as the Zephyr base while binding Aegis device adaptation to the concrete T-LoRa-Pager wiring described in the overlay and `zephyr_tlora_pager_sx1262` board package.
+This uses the ESP32-S3 devkit SoC target as the Zephyr base while binding Aegis device adaptation to the concrete T-Deck wiring described in the overlay and `zephyr_tdeck_sx1262` board package.
 
 Local Zephyr patch behavior:
 
@@ -65,9 +65,9 @@ cmake --build build-zephyr --target aegis_zephyr_flash_appfs
 
 `aegis_zephyr_flash_appfs` then flashes `appfs.bin` into the board `storage_partition`.
 
-Bringup-Ready checklist for LilyGo T-LoRa-Pager:
+Bringup-Ready checklist for LilyGo T-Deck:
 
-1. Build the resident Zephyr image with the pager overlay and app modules enabled.
+1. Build the resident Zephyr image with the T-Deck overlay and app modules enabled.
 2. Flash the resident Zephyr image with the normal Zephyr `flash` target or `west flash`.
 3. Build `aegis_zephyr_appfs_image`.
 4. Flash `appfs.bin` with `aegis_zephyr_flash_appfs`.
